@@ -302,6 +302,110 @@ cards yet).
 
 ---
 
+## Phase 3 — Whiteboard Canvas Foundation (pan/zoom + spatial-index scaffolding) — 2026-07-25
+
+### What was done
+
+- A full-bleed, pannable/zoomable **infinite canvas** for a single project
+  (`/projects/:id`): drag-to-pan, ctrl/⌘+wheel (and trackpad pinch) zoom-to-cursor,
+  two-finger/wheel pan, a camera-tracking background grid, and a floating HUD
+  (zoom %, +/−, "Reset view").
+- The **camera/viewport model** (`camera = {center,zoom}`, zoom clamped 0.1–6.0) as
+  a Zustand store, with pure screen↔world coordinate transforms.
+- The **uniform-grid spatial index** (`SpatialGrid`) as a standalone, fully
+  unit-tested DSA module — the scaffolding for Phase 4 culling/hit-testing.
+  **No cards yet**; the grid is exercised only by a dev-only debug overlay.
+- The project name loads via `GET /api/projects/:id`, reusing the Phase 2
+  owner-scoped 404 so a non-owned/nonexistent id renders a "not found" state.
+- **Vitest** introduced as the client test runner (25 unit tests) and wired into CI.
+
+### How it was done
+
+- **Pure logic isolated from React** (`client/src/canvas/`): `coordinates.ts`
+  (transforms, `zoomToCursor`, `clampZoom`) and `SpatialGrid.ts` (`Map<"col|row",
+Set<CardId>>` + a bbox-per-id map for O(1) remove and precise queries). Both are
+  DOM-free and unit-tested to the DSA contract (build O(n); insert/remove/update/move
+  O(1) avg; search O(cells+hits); hitTest O(cell_occupancy)).
+- **State in Zustand, not React** (`store/viewportStore.ts`): pan/zoom fire at
+  pointer/wheel rate, so only the layers that subscribe (WorldLayer, BackgroundGrid)
+  re-render — never the page. The store lives outside the tree, surviving StrictMode's
+  dev double-mount. Every action clamps zoom and drops non-finite results.
+- **Rendering** = one CSS-`transform`ed world layer (`transform-origin: 0 0`) over a
+  gradient background grid whose `backgroundSize`/`backgroundPosition` track the camera
+  (crisp 1px lines at any zoom). DOM only, per ADR D8.
+- **Input** (`hooks/usePanZoom.ts`): pointer capture for drag-pan; a **native** wheel
+  listener with `{ passive:false }` so it can `preventDefault()` (React's synthetic
+  `onWheel` is passive). Listeners are added/removed in one effect (StrictMode-safe),
+  and a press that starts on a HUD control never begins a pan.
+- **Cell size = 512** world px (project's documented tuning target; resolves the ADR's
+  512-vs-3000 note). **z-order** representation deferred to Phase 4 (Card model).
+- **Dev-only validation:** a debug overlay (toggle in the HUD) draws the spatial cells
+  and 8 non-persisted demo markers in world space and reports a live "N / M markers in
+  view" via `SpatialGrid.search`. Gated on `import.meta.env.DEV` referenced directly at
+  each JSX site, and the demo grid is built lazily (no module-level side effect) — so
+  the overlay, its data, and `SpatialGrid` are **fully tree-shaken from prod** (verified:
+  0 debug bytes in the production bundle; bundle shrank ~1.9 kB).
+
+### What changed
+
+- **New dependency (exact-pinned):** `vitest@4.1.10` (dev; MIT, native Vite
+  integration, peer `vite ^6||^7||^8` — satisfies our Vite 8.1.5). Adds no new
+  high/critical advisory; `audit-ci` stays green. Tests run in `environment: 'node'`
+  (no jsdom/happy-dom dependency).
+- **New scripts (client):** `test` (`vitest run`), `test:watch`; new `vitest.config.ts`.
+- **New files:** `client/src/canvas/*` (constants, types, coordinates(+test),
+  SpatialGrid(+test), WorldLayer, BackgroundGrid, CanvasHud, WhiteboardCanvas, DebugLayer,
+  DebugCount, debugData), `client/src/store/viewportStore.ts(+test)`,
+  `client/src/hooks/usePanZoom.ts`.
+- **Edited:** `api/projects.ts` (+`get`), `hooks/useProjects.ts` (+`useProject`),
+  `pages/WhiteboardPage.tsx` (rewrite: load/404/error → canvas), `index.css`
+  (`.whiteboard*` block), `tsconfig.node.json` (+`vitest.config.ts`),
+  `.github/workflows/ci.yml` (+`npm test --workspace client`).
+- **Breaking:** none. No schema, migration, or server route changes.
+
+### Security notes (Phase 3 scope)
+
+- **A01 / CWE-639 (IDOR):** the whiteboard route loads via the owner-scoped
+  `GET /projects/:id`; non-owned/nonexistent (404) and non-UUID (400) both render the
+  same "not found" — no existence leak. `encodeURIComponent(id)` hardens the path.
+- **A03 / CWE-79 (XSS):** the project name renders via React escaping only; no
+  `dangerouslySetInnerHTML`.
+- **CWE-1284 / CWE-400 (robustness/DoS):** `Number.isFinite` guards + `clampZoom` stop a
+  bad wheel/pointer delta from freezing the layout with a `NaN`/`Infinity` transform;
+  handlers mutate only numeric camera state and `preventDefault` the wheel so it cannot
+  hijack page scroll/navigation.
+- **A06 (components):** `vitest` exact-pinned; `audit-ci` gate unchanged (waivers as Phase 2).
+
+### Verification (Phase 3)
+
+| Check                          | Result                                                        |
+| ------------------------------ | ------------------------------------------------------------- |
+| format / lint / typecheck      | ✅ all pass (server + client)                                 |
+| build (client)                 | ✅ `tsc -b && vite build`                                     |
+| Client unit tests (Vitest)     | ✅ **25/25** (coordinates 7, SpatialGrid 10, viewportStore 8) |
+| Cumulative unit / e2e          | ✅ **40 unit** (15 server + 25 client) / 12 e2e unchanged     |
+| Debug overlay excluded in prod | ✅ 0 debug bytes in the built bundle (tree-shaken)            |
+| `audit-ci` gate                | ✅ no un-allowlisted high/critical                            |
+| 500-line/file cap              | ✅ largest new file 140 lines                                 |
+
+### Residual risks / follow-ups
+
+- Multi-touch **pinch** works via ctrl+wheel (browsers deliver trackpad pinch that way);
+  there is no dedicated touch-pinch gesture handler yet.
+- The debug overlay is dev-only and verified absent from prod; demo markers are
+  non-persisted throwaway data for validating the transforms/index.
+- The `SpatialGrid` is scaffolding — nothing populates it in the app until Phase 4 wires
+  cards in (and resolves `zIndex` vs. fractional-index for z-order).
+- react-router RSC / brace-expansion / valibot waivers unchanged (still allowlisted).
+
+### Phase gate
+
+Phase 3 is complete. **Awaiting explicit approval to begin Phase 4** (card CRUD +
+per-card IDOR, wiring cards into the spatial index, and card content rendering with XSS
+sanitization — the z-order representation is decided there).
+
+---
+
 ## Research findings — AFFiNE / BlockSuite
 
 Legend: **[V]** verified from the cited repo/docs · **[I]** reasoned inference.

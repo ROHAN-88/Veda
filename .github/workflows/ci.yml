@@ -48,6 +48,7 @@ jobs:
       - run: npm run prisma:deploy --workspace server
       - run: npm test --workspace server
       - run: npm run test:e2e --workspace server
+      - run: npm test --workspace client
 
   security:
     name: Dependency audit & secret scan

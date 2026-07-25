@@ -8,6 +8,14 @@ export function useProjects() {
   return useQuery<Project[]>({ queryKey: PROJECTS_KEY, queryFn: projectsApi.list });
 }
 
+export function useProject(id: string | undefined) {
+  return useQuery<Project>({
+    queryKey: ['projects', id],
+    queryFn: () => projectsApi.get(id as string),
+    enabled: id != null && id.length > 0,
+  });
+}
+
 export function useCreateProject() {
   const queryClient = useQueryClient();
   return useMutation({

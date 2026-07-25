@@ -3,6 +3,7 @@ import type { Project } from './types';
 
 export const projectsApi = {
   list: (): Promise<Project[]> => apiFetch('/projects'),
+  get: (id: string): Promise<Project> => apiFetch(`/projects/${encodeURIComponent(id)}`),
   create: (name: string): Promise<Project> => apiJson('/projects', 'POST', { name }),
   rename: (id: string, name: string): Promise<Project> =>
     apiJson(`/projects/${id}`, 'PATCH', { name }),
