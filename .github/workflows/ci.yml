@@ -63,8 +63,10 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - name: Dependency audit (fail on high/critical)
-        run: npm audit --audit-level=high
+      - name: Dependency audit (blocks new high/critical; documented waivers allowlisted)
+        # audit-ci fails on any high/critical advisory NOT in audit-ci.jsonc's
+        # allowlist. Allowlisted advisories are documented in docs/PROGRESS.md.
+        run: npm run audit
       - name: Secret scan (gitleaks)
         # gitleaks-action is free for public repos; private/org use needs a
         # GITLEAKS_LICENSE secret.

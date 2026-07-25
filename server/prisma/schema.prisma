@@ -30,8 +30,22 @@ model User {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
   sessions         Session[]
+  projects         Project[]
 
   @@map("users")
+}
+
+/// A workspace owned by a single user. Holds the whiteboard of cards (Phase 3+).
+model Project {
+  id        String   @id @default(uuid())
+  ownerId   String
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ownerId])
+  @@map("projects")
 }
 
 /// A server-side session. The raw token lives only in the client cookie; the

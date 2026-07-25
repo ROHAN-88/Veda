@@ -32,7 +32,7 @@ describe('Auth (e2e)', () => {
   // The CSRF token is bound to the session, so a fresh one is fetched after any
   // auth-state change (login/refresh) — mirroring what the SPA will do.
   async function csrf(agent: Agent): Promise<string> {
-    const res = await agent.get('/auth/csrf').expect(200);
+    const res = await agent.get('/api/auth/csrf').expect(200);
     return res.body.csrfToken as string;
   }
 
@@ -42,35 +42,35 @@ describe('Auth (e2e)', () => {
 
     let token = await csrf(agent);
     await agent
-      .post('/auth/register')
+      .post('/api/auth/register')
       .set('X-CSRF-Token', token)
       .send({ email, password: PASSWORD })
       .expect(201);
 
     const login = await agent
-      .post('/auth/login')
+      .post('/api/auth/login')
       .set('X-CSRF-Token', token)
       .send({ email, password: PASSWORD })
       .expect(200);
     expect(login.body.user.email).toBe(email);
     expect(login.body.user.passwordHash).toBeUndefined();
 
-    const me = await agent.get('/auth/me').expect(200);
+    const me = await agent.get('/api/auth/me').expect(200);
     expect(me.body.user.email).toBe(email);
     expect(me.body.user.passwordHash).toBeUndefined();
 
     token = await csrf(agent);
-    await agent.post('/auth/refresh').set('X-CSRF-Token', token).expect(200);
-    await agent.get('/auth/me').expect(200);
+    await agent.post('/api/auth/refresh').set('X-CSRF-Token', token).expect(200);
+    await agent.get('/api/auth/me').expect(200);
 
     token = await csrf(agent);
-    await agent.post('/auth/logout').set('X-CSRF-Token', token).expect(200);
-    await agent.get('/auth/me').expect(401);
+    await agent.post('/api/auth/logout').set('X-CSRF-Token', token).expect(200);
+    await agent.get('/api/auth/me').expect(401);
   });
 
   it('rejects a state-changing request with no CSRF token (403)', async () => {
     await request(server())
-      .post('/auth/register')
+      .post('/api/auth/register')
       .send({ email: uniqueEmail(), password: PASSWORD })
       .expect(403);
   });
@@ -79,7 +79,7 @@ describe('Auth (e2e)', () => {
     const agent = request.agent(server());
     const token = await csrf(agent);
     await agent
-      .post('/auth/register')
+      .post('/api/auth/register')
       .set('X-CSRF-Token', token)
       .send({ email: uniqueEmail(), password: 'short' })
       .expect(400);
@@ -89,7 +89,7 @@ describe('Auth (e2e)', () => {
     const agent = request.agent(server());
     const token = await csrf(agent);
     await agent
-      .post('/auth/register')
+      .post('/api/auth/register')
       .set('X-CSRF-Token', token)
       .send({ email: uniqueEmail(), password: PASSWORD, role: 'admin' })
       .expect(400);
@@ -100,12 +100,12 @@ describe('Auth (e2e)', () => {
     const email = uniqueEmail();
     const token = await csrf(agent);
     await agent
-      .post('/auth/register')
+      .post('/api/auth/register')
       .set('X-CSRF-Token', token)
       .send({ email, password: PASSWORD })
       .expect(201);
     await agent
-      .post('/auth/register')
+      .post('/api/auth/register')
       .set('X-CSRF-Token', token)
       .send({ email, password: PASSWORD })
       .expect(409);
@@ -116,14 +116,14 @@ describe('Auth (e2e)', () => {
     const email = uniqueEmail();
     let token = await csrf(agent);
     await agent
-      .post('/auth/register')
+      .post('/api/auth/register')
       .set('X-CSRF-Token', token)
       .send({ email, password: PASSWORD })
       .expect(201);
 
     token = await csrf(agent);
     const res = await agent
-      .post('/auth/login')
+      .post('/api/auth/login')
       .set('X-CSRF-Token', token)
       .send({ email, password: 'definitely-wrong' })
       .expect(401);
@@ -136,7 +136,7 @@ describe('Auth (e2e)', () => {
     const email = uniqueEmail();
     let token = await csrf(agent);
     await agent
-      .post('/auth/register')
+      .post('/api/auth/register')
       .set('X-CSRF-Token', token)
       .send({ email, password: PASSWORD })
       .expect(201);
@@ -144,14 +144,14 @@ describe('Auth (e2e)', () => {
     for (let i = 0; i < 5; i += 1) {
       token = await csrf(agent);
       await agent
-        .post('/auth/login')
+        .post('/api/auth/login')
         .set('X-CSRF-Token', token)
         .send({ email, password: `wrong-${i}` })
         .expect(401);
     }
     token = await csrf(agent);
     await agent
-      .post('/auth/login')
+      .post('/api/auth/login')
       .set('X-CSRF-Token', token)
       .send({ email, password: PASSWORD })
       .expect(401);
@@ -166,7 +166,7 @@ describe('Auth (e2e)', () => {
       for (let i = 0; i < 8; i += 1) {
         const token = await csrf(agent);
         const res = await agent
-          .post('/auth/login')
+          .post('/api/auth/login')
           .set('X-CSRF-Token', token)
           .send({ email, password: 'nope' });
         if (res.status === 429) {

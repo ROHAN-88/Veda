@@ -9,6 +9,7 @@ import { SecurityModule } from './common/security/security.module';
 import { validateEnv } from './config/env.validation';
 import { HealthModule } from './health/health.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { ProjectsModule } from './projects/projects.module';
 
 /**
  * Root module. `ConfigModule` validates the environment at boot (fail-fast).
@@ -32,6 +33,7 @@ import { PrismaModule } from './prisma/prisma.module';
     PrismaModule,
     SecurityModule,
     AuthModule,
+    ProjectsModule,
     HealthModule,
   ],
   providers: [

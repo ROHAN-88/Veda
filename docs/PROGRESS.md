@@ -202,6 +202,106 @@ UI — plus the login/register UI that Phase 1 intentionally deferred).
 
 ---
 
+## Phase 2 — Projects (Workspaces): CRUD, Authorization & UI — 2026-07-25
+
+### What was done
+
+- **Project CRUD API** — `POST /api/projects`, `GET /api/projects`,
+  `GET/PATCH/DELETE /api/projects/:id`, all guarded by the Phase 1
+  `SessionAuthGuard` + `@CurrentUser` and scoped to the owner.
+- **Prisma `Project` model** + `add_projects` migration (cascade-deletes with its
+  owner).
+- **Global `/api` prefix** (health stays at `/health`) enabling the same-origin
+  SPA↔API layout.
+- **Frontend**: login/register/logout UI, a `ProtectedRoute`, and the projects
+  list/create/rename/delete UI — React Router + React Query (server state) +
+  a CSRF-aware fetch client over the Vite `/api` proxy.
+- **Tests**: +5 unit (projects service) and +4 e2e (CRUD + two-user IDOR + 401);
+  Phase 1 auth e2e updated to `/api`. Totals: **15 unit + 12 e2e**, all green.
+- **CI**: the dependency-audit gate is now `audit-ci` with a reviewed allowlist.
+
+### How it was done
+
+- **IDOR protection (the phase's core):** every `ProjectsService` query is
+  owner-scoped; `/:id` resolves through `getOwned()`, which throws
+  `NotFoundException` (404, not 403) for a project the caller doesn't own — a
+  guessed id can't confirm existence. The e2e suite proves user B gets 404 on
+  user A's project for read/update/delete and never sees it listed.
+- **Same-site cookies:** the `/api` prefix + Vite dev proxy (`/api` →
+  `localhost:3000`) make the SPA and API same-origin, so `SameSite=Strict`
+  cookies flow in dev exactly as behind one reverse proxy in prod.
+- **Client:** `apiFetch` sends credentials and attaches `X-CSRF-Token` on
+  mutations, refreshing the (session-bound) token once on a 403 and retrying.
+  React Query owns `me`/`projects` server state with cache invalidation on
+  mutations; Zustand is reserved for canvas state (Phase 3+). Register auto-logs
+  in. Project names render via React escaping only (no `dangerouslySetInnerHTML`).
+- **Small choices:** `UpdateProjectDto` written by hand (avoided a
+  `@nestjs/mapped-types` dependency); `ParseUUIDPipe` on `:id`.
+- **Dependency-audit work (important):** installing the client surfaced real
+  advisories. A `react-router-dom` downgrade to `7.11.0` _reintroduced_ serious
+  SPA vulns (XSS/RCE) in the `6.0.0–7.17.0` range, so it was reverted to
+  **7.18.1** (patched against those; only an unreachable RSC-mode CSRF remains).
+  Introduced **`audit-ci`** with an allowlist so CI blocks _new_ high/critical
+  advisories while permitting the documented, currently-unfixable, unreachable
+  ones (see Security notes).
+
+### What changed
+
+- **New dependencies** (exact-pinned): client — `@tanstack/react-query` `5.101.4`,
+  `react-router-dom` `7.18.1`, `zustand` `5.0.14`; root dev — `audit-ci` `7.1.0`.
+- **Schema:** `Project` model + `add_projects` migration.
+- **Routing:** all API routes now under **`/api`** (health at `/health`); the SPA
+  calls same-origin `/api/*` through the Vite proxy. Phase 1 e2e paths updated.
+- **New files:** `audit-ci.jsonc` (allowlist) + root `audit` script; the whole
+  `client/src/{api,hooks,pages,components}` tree.
+- **Breaking:** the API base path moved to `/api` (internal; e2e updated).
+
+### Security notes (Phase 2 scope)
+
+- **A01 / CWE-639/862/863 (IDOR):** owner-scoped queries; 404 for non-owned;
+  cross-user isolation proven by e2e.
+- **A07 / CWE-287:** all project routes require a session (401 otherwise).
+- **CWE-352 CSRF:** double-submit token on every mutation; client auto-refresh on 403.
+- **CWE-79 XSS:** user-supplied project names rendered through React escaping only.
+- **A03 / CWE-89:** all DB access via Prisma (parameterized).
+- **A06 (vulnerable components):** `audit-ci` blocks new high/critical. **Waivers**
+  (justification · compensating control · review by ~2026-10-31):
+  - `GHSA-qwww-vcr4-c8h2` (react-router, high) — RSC-mode CSRF only; we use
+    client-side SPA routing, not RSC, so it is not reachable. Our own
+    `csrf-csrf` double-submit protects the API independently. No patched version
+    above the affected range exists yet.
+  - `GHSA-mh99-v99m-4gvg` (brace-expansion, high) — dev-only build/test tooling
+    (jest, `@nestjs/cli`), not in the shipped bundle; only processes our own glob
+    patterns. The only fix (`5.0.8`) is an ESM break for `minimatch@3` consumers.
+  - `GHSA-5qjj-4xww-7phc` (valibot, moderate) — via the Prisma CLI (dev); moderate,
+    below the high gate. Tracked.
+
+### Verification (Phase 2)
+
+| Check                     | Result                                                       |
+| ------------------------- | ------------------------------------------------------------ |
+| `prisma migrate dev`      | ✅ `add_projects` applied                                    |
+| format / lint / typecheck | ✅ all pass (server + client)                                |
+| build (server + client)   | ✅                                                           |
+| Unit tests                | ✅ **15/15** (auth + session + projects)                     |
+| e2e tests (vs Postgres)   | ✅ **12/12** (incl. two-user IDOR → 404, 401-unauth)         |
+| `audit-ci` gate           | ✅ no un-allowlisted high/critical                           |
+| Live proxy integration    | ✅ `localhost:5173/` → 200, `/api/auth/csrf` via proxy → 200 |
+
+### Residual risks / follow-ups
+
+- The react-router RSC advisory is tracked; bump when a fix ships above the range.
+- Rename/delete use `window.prompt`/`confirm` (MVP); richer modals can come later.
+- e2e uses the dev DB with unique emails; CI uses a fresh Postgres service container.
+
+### Phase gate
+
+Phase 2 is complete. **Awaiting explicit approval to begin Phase 3** (whiteboard
+canvas foundation: pan/zoom, viewport, and the spatial-index scaffolding — no
+cards yet).
+
+---
+
 ## Research findings — AFFiNE / BlockSuite
 
 Legend: **[V]** verified from the cited repo/docs · **[I]** reasoned inference.

@@ -1,8 +1,24 @@
+import { createBrowserRouter, RouterProvider } from 'react-router-dom';
+import { ProtectedRoute } from './components/ProtectedRoute';
+import { LoginPage } from './pages/LoginPage';
+import { NotFoundPage } from './pages/NotFoundPage';
+import { ProjectsPage } from './pages/ProjectsPage';
+import { RegisterPage } from './pages/RegisterPage';
+import { WhiteboardPage } from './pages/WhiteboardPage';
+
+const router = createBrowserRouter([
+  { path: '/login', element: <LoginPage /> },
+  { path: '/register', element: <RegisterPage /> },
+  {
+    element: <ProtectedRoute />,
+    children: [
+      { path: '/', element: <ProjectsPage /> },
+      { path: '/projects/:id', element: <WhiteboardPage /> },
+    ],
+  },
+  { path: '*', element: <NotFoundPage /> },
+]);
+
 export default function App() {
-  return (
-    <main className="app">
-      <h1>Second Brain</h1>
-      <p>Phase 0 scaffold is live. Projects arrive in Phase 2; the whiteboard in Phase 3–4.</p>
-    </main>
-  );
+  return <RouterProvider router={router} />;
 }

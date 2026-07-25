@@ -1,0 +1,19 @@
+{
+  // Blocks CI on any HIGH or CRITICAL advisory that is NOT explicitly reviewed
+  // and allowlisted below. New advisories fail the build; the allowlisted ones
+  // are documented in docs/PROGRESS.md with justification, compensating control,
+  // and a review/expiry date. Re-review each when a patched version ships.
+  "high": true,
+  "allowlist": [
+    // react-router RSC-mode CSRF bypass — NOT reachable: we use client-side SPA
+    // routing (createBrowserRouter/RouterProvider), not React Router RSC/server
+    // features. Our own csrf-csrf double-submit protects the API independently.
+    // No patched version exists above the affected range yet.
+    "GHSA-qwww-vcr4-c8h2",
+    // brace-expansion DoS — dev-only build/test tooling (jest, @nestjs/cli), not
+    // in the shipped bundle; only processes our own glob patterns, never attacker
+    // input. The only fix (5.0.8) is an ESM major bump that would break minimatch@3
+    // consumers in the toolchain.
+    "GHSA-mh99-v99m-4gvg"
+  ]
+}

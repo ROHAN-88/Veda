@@ -4,7 +4,7 @@ An AFFiNE-inspired "second brain" app: each **project** contains an infinite,
 pannable/zoomable **whiteboard** of freely-positioned **cards**. Built local-first
 in spirit, security-first in practice.
 
-> **Status:** Phase 1 (auth + security baseline + CI/DevSecOps) complete.
+> **Status:** Phase 2 (projects CRUD + per-user authorization + auth/projects UI) complete.
 > See [`docs/PROGRESS.md`](docs/PROGRESS.md) — the single source of truth for
 > project history and the full Architecture Decision Record (ADR).
 

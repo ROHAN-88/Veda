@@ -14,6 +14,10 @@ import { buildCorsOptions, helmetOptions } from './config/security.config';
  */
 export function configureApp(app: NestExpressApplication): void {
   const config = app.get(ConfigService);
+  // Namespace the API under /api (health stays at /health for uptime probes) so
+  // the SPA and API are same-origin behind one reverse proxy in prod and the
+  // Vite dev proxy in dev — required for SameSite=Strict cookies.
+  app.setGlobalPrefix('api', { exclude: ['health'] });
   app.set('trust proxy', 1);
   app.use(helmet(helmetOptions));
   app.use(cookieParser(config.getOrThrow<string>('SESSION_SECRET')));
