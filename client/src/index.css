@@ -282,3 +282,73 @@ button.ghost.danger {
   border-radius: 6px;
   pointer-events: none;
 }
+
+/* Cards (Phase 4) — world-positioned children of the transformed world layer */
+.whiteboard__card {
+  position: absolute;
+  box-sizing: border-box;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, Canvas 92%, transparent);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+.whiteboard__card.dragging {
+  cursor: grabbing;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.28);
+}
+
+.whiteboard__card-content {
+  height: 100%;
+  margin: 0;
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow: hidden;
+}
+
+.whiteboard__card-placeholder {
+  opacity: 0.5;
+  font-style: italic;
+}
+
+.whiteboard__card-textarea {
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: none;
+  outline: none;
+  resize: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.whiteboard__card-delete {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  padding: 0 0.4rem;
+  line-height: 1.4;
+  font-size: 1rem;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.whiteboard__card:hover .whiteboard__card-delete,
+.whiteboard__card:focus-within .whiteboard__card-delete {
+  opacity: 1;
+}
+
+.whiteboard__hud-divider {
+  width: 1px;
+  align-self: stretch;
+  margin: 0.1rem 0.15rem;
+  background: var(--border);
+}

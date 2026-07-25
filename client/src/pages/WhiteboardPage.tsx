@@ -44,7 +44,7 @@ export function WhiteboardPage() {
         </Link>
         <span className="whiteboard-title">{query.data?.name}</span>
       </div>
-      <WhiteboardCanvas />
+      <WhiteboardCanvas projectId={id} />
     </>
   );
 }

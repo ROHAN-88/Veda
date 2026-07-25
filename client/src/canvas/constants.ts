@@ -27,3 +27,7 @@ export const ZOOM_STEP = 1.2;
 
 /** Background-grid line colour (adapts to light/dark via currentColor). */
 export const GRID_LINE_COLOR = 'color-mix(in srgb, currentColor 12%, transparent)';
+
+/** Default card dimensions in world px — must match the Prisma schema defaults. */
+export const DEFAULT_CARD_W = 240;
+export const DEFAULT_CARD_H = 160;

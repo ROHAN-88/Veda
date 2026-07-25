@@ -6,12 +6,20 @@ interface CanvasHudProps {
   showDebugToggle: boolean;
   debugOn: boolean;
   onToggleDebug: () => void;
+  /** Create a card at the viewport centre. */
+  onAddCard: () => void;
   /** Optional dev-only readout rendered at the left of the HUD. */
   debugSlot?: ReactNode;
 }
 
-/** Floating controls: zoom %, zoom in/out (about centre), reset, debug toggle. */
-export function CanvasHud({ showDebugToggle, debugOn, onToggleDebug, debugSlot }: CanvasHudProps) {
+/** Floating controls: add card, zoom %, zoom in/out (about centre), reset, debug. */
+export function CanvasHud({
+  showDebugToggle,
+  debugOn,
+  onToggleDebug,
+  onAddCard,
+  debugSlot,
+}: CanvasHudProps) {
   const zoom = useViewportStore((state) => state.camera.zoom);
   const zoomAroundCenter = useViewportStore((state) => state.zoomAroundCenter);
   const reset = useViewportStore((state) => state.reset);
@@ -19,6 +27,8 @@ export function CanvasHud({ showDebugToggle, debugOn, onToggleDebug, debugSlot }
   return (
     <div className="whiteboard__hud">
       {debugSlot}
+      <button onClick={onAddCard}>+ Card</button>
+      <span className="whiteboard__hud-divider" aria-hidden="true" />
       {showDebugToggle && (
         <button className="ghost" onClick={onToggleDebug} aria-pressed={debugOn}>
           {debugOn ? 'Debug: on' : 'Debug'}

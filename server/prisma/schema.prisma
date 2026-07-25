@@ -35,7 +35,7 @@ model User {
   @@map("users")
 }
 
-/// A workspace owned by a single user. Holds the whiteboard of cards (Phase 3+).
+/// A workspace owned by a single user. Holds the whiteboard of cards.
 model Project {
   id        String   @id @default(uuid())
   ownerId   String
@@ -43,9 +43,31 @@ model Project {
   name      String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  cards     Card[]
 
   @@index([ownerId])
   @@map("projects")
+}
+
+/// A card on a project's whiteboard. Positioned in unbounded float world space
+/// (x,y = top-left; w,h = extent). `content` is PLAIN TEXT, rendered via React
+/// escaping only (no HTML). `zIndex` is an integer stacking order; the server
+/// assigns max+1 on create. Deleted when its project (or the owner) is deleted.
+model Card {
+  id        String   @id @default(uuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  x         Float
+  y         Float
+  w         Float    @default(240)
+  h         Float    @default(160)
+  content   String   @default("")
+  zIndex    Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId])
+  @@map("cards")
 }
 
 /// A server-side session. The raw token lives only in the client cookie; the

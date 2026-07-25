@@ -406,6 +406,102 @@ sanitization — the z-order representation is decided there).
 
 ---
 
+## Phase 4 — Cards: CRUD, Spatial-Index Wiring & Plain-Text Content — 2026-07-25
+
+### What was done
+
+- **Cards** — freely positioned, draggable, editable plain-text notes on a project's
+  whiteboard. Create by **double-clicking** empty canvas (card appears under the cursor)
+  or via the HUD **"+ Card"**; drag to move; double-click to edit; hover for a delete (×);
+  press to bring to front.
+- **Nested REST resource** `/api/projects/:projectId/cards` (full CRUD) with **per-user
+  AND per-project** authorization.
+- **Cards wired into the Phase 3 `SpatialGrid`**, which now does real work: viewport
+  **culling** — only cards intersecting the padded viewport (plus the one being dragged)
+  are mounted.
+- **Decisions settled** (deferred by the ADR to this phase): z-order = **integer
+  `zIndex`** (server assigns max+1); content = **plain text** (React-escaped).
+
+### How it was done
+
+- **Backend mirrors the Projects module.** `CardsService` injects only `PrismaService`;
+  every single-card query filters `{ id, projectId, project: { ownerId } }`, so a card that
+  isn't the caller's — or isn't in the URL's project — returns **404** (never 403). `create`
+  and `list` gate on `assertProjectOwned`. `create` computes `zIndex = (max ?? -1) + 1`;
+  `zIndex` is not accepted from the body (can't be spoofed). Controller mirrors Projects
+  (class `SessionAuthGuard`, `ParseUUIDPipe` on both params, POST 201 / DELETE 204).
+- **DTOs** are hand-written mirrors (not `PartialType`) with shared bounds
+  (`card-bounds.ts`): coords `±1e6`, size `[40, 10_000]`, content `≤ 10_000`, `zIndex`
+  `≤ 2_147_483_647`, `@IsNumber({allowNaN:false, allowInfinity:false})`.
+- **Frontend** extends the Phase 3 canvas with no new dependencies. `useCards` holds the
+  server list; `useUpdateCard`/`useDeleteCard` are **optimistic** (ADR D10): `onMutate`
+  applies the change synchronously (so a drag-end commit batches with clearing the drag
+  offset — no flicker), rolls back on error, reconciles on settle. Content edits debounce
+  via a hand-rolled `useDebouncedCallback` (400 ms; flush on blur/unmount). Card drag uses
+  the existing `[data-no-pan]` hook + card-owned pointer capture, so it never pans the
+  canvas. `CardsLayer` keeps a `SpatialGrid` in sync (`useMemo` rebuild on the card list)
+  and culls with `grid.search(paddedViewportRect)`; `CardView` (`React.memo`) is thin
+  presentation + local interaction. Pure geometry (`cardGeometry.ts`) is unit-tested.
+- **Rendering** stays DOM-only: cards are absolutely-positioned world-space children of the
+  one CSS-transformed `WorldLayer`, so pan/zoom needs no per-card math.
+
+### What changed
+
+- **No new dependencies.** Plain-text + React escaping replaces any sanitizer; the debounce
+  is hand-rolled. `audit-ci` stays green.
+- **Schema/migration:** `Card` model (`x,y,w,h` floats, `content`, `zIndex`, cascade from
+  Project) + `cards Card[]` on `Project`; migration `20260725062045_add_cards`.
+- **New files:** `server/src/cards/*` (controller, service, module, dto/{create,update,bounds},
+  service.spec) + `server/test/cards.e2e-spec.ts`; `client/src/api/cards.ts`,
+  `client/src/hooks/{useCards,useDebouncedCallback}.ts`,
+  `client/src/canvas/{cardGeometry(+test),CardsLayer,CardView}.tsx`.
+- **Edited:** `client/src/canvas/{WhiteboardCanvas,CanvasHud,constants}.ts(x)`,
+  `pages/WhiteboardPage.tsx` (threads `projectId`), `index.css` (card styles),
+  `api/types.ts` (`Card`), `server/src/app.module.ts` (register `CardsModule`).
+- **Breaking:** none.
+
+### Security notes (Phase 4 scope)
+
+- **A01 / CWE-639 (IDOR, per-user + per-project):** single relation-filtered query →
+  404; proven by e2e **two-user** and **two-project** 404 matrices.
+- **A03 / CWE-79 (XSS):** card content is plain text via React escaping (`pre-wrap`); no
+  `dangerouslySetInnerHTML`, no sanitizer — the Phase-0-deferred item, satisfied by
+  construction.
+- **CWE-20 / CWE-400 (validation / DoS):** finite + `@Min/@Max` bounds on coords/size,
+  `@MaxLength` on content, `@Max` on zIndex; `whitelist`/`forbidNonWhitelisted` strip
+  unknown fields; client camera reads are finite-guarded.
+- **CWE-352 CSRF** automatic (double-submit + retry); **A03/CWE-89** all Prisma.
+
+### Verification (Phase 4)
+
+| Check                     | Result                                                           |
+| ------------------------- | ---------------------------------------------------------------- |
+| `prisma migrate dev`      | ✅ `add_cards` applied                                           |
+| format / lint / typecheck | ✅ all pass (server + client)                                    |
+| build (server + client)   | ✅                                                               |
+| Unit tests                | ✅ **server 22** (+7 cards) · **client 32** (+7 cardGeometry)    |
+| e2e tests (vs Postgres)   | ✅ **17** (+5 cards: CRUD, two-user IDOR, two-project IDOR, 400) |
+| `audit-ci` gate           | ✅ no un-allowlisted high/critical — **no new dependencies**     |
+| 500-line/file cap         | ✅ largest new source file 160 lines                             |
+
+### Residual risks / follow-ups
+
+- **Bring-to-front `zIndex` is client-computed** (max+1) — correct for single-user MVP; a
+  future server-side `bring-to-front` endpoint (server recomputes max+1) removes a
+  concurrent-tab race.
+- No card **resize** yet (fixed default size, draggable + editable); resize handles are a
+  later polish.
+- Markdown/rich content deferred (plain text for now); would add a sanitizer when it lands.
+- react-router RSC / brace-expansion / valibot waivers unchanged (still allowlisted).
+
+### Phase gate
+
+Phase 4 is complete. **Awaiting explicit approval to begin Phase 5** (hardening: security
+headers/CSP review, error/observability polish, performance passes, and any deferred
+follow-ups above).
+
+---
+
 ## Research findings — AFFiNE / BlockSuite
 
 Legend: **[V]** verified from the cited repo/docs · **[I]** reasoned inference.
