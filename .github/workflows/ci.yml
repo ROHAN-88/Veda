@@ -1,0 +1,85 @@
+# CI / DevSecOps pipeline. Scaffolded in Phase 1; activates on the first push to
+# a GitHub remote. Third-party actions are pinned to a commit SHA (CWE-829) and
+# the default token is read-only (least privilege).
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    name: Lint, type-check, build & test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: secondbrain_ci
+          POSTGRES_USER: ci
+          # Ephemeral, CI-only credential — never a real secret.
+          POSTGRES_PASSWORD: ci_password_ephemeral
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci -d secondbrain_ci"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://ci:ci_password_ephemeral@localhost:5432/secondbrain_ci?schema=public
+      SESSION_SECRET: ci-session-secret-at-least-32-characters-long
+      CORS_ORIGINS: http://localhost:5173
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm run prisma:generate --workspace server
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm run prisma:deploy --workspace server
+      - run: npm test --workspace server
+      - run: npm run test:e2e --workspace server
+
+  security:
+    name: Dependency audit & secret scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # full history for secret scanning
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Dependency audit (fail on high/critical)
+        run: npm audit --audit-level=high
+      - name: Secret scan (gitleaks)
+        # gitleaks-action is free for public repos; private/org use needs a
+        # GITLEAKS_LICENSE secret.
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  sast:
+    name: Static analysis (Semgrep)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    container:
+      image: semgrep/semgrep:1.171.0
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Semgrep scan
+        run: semgrep scan --config p/owasp-top-ten --config p/typescript --config p/nodejs --error

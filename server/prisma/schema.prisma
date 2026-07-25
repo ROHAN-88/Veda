@@ -1,0 +1,54 @@
+// Prisma 7 schema — Phase 1 (auth).
+//
+// Security:
+//   - The app connects via DATABASE_URL, injected from the environment only
+//     (CWE-798). Use a least-privilege role and SSL outside local dev (CIS
+//     PostgreSQL). Prisma parameterizes every query (mitigates CWE-89).
+//   - Session tokens are NEVER stored raw — only a SHA-256 hash (`tokenHash`).
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  runtime      = "nodejs"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  // Prisma 7: the connection URL is NOT set here. Migrate reads it from
+  // prisma.config.ts (datasource.url); the runtime client gets it via the
+  // @prisma/adapter-pg driver adapter (see prisma.service.ts).
+  provider = "postgresql"
+}
+
+/// An application user. Passwords are stored only as argon2id hashes.
+model User {
+  id               String    @id @default(uuid())
+  email            String    @unique
+  passwordHash     String
+  failedLoginCount Int       @default(0)
+  lockedUntil      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  sessions         Session[]
+
+  @@map("users")
+}
+
+/// A server-side session. The raw token lives only in the client cookie; the
+/// DB holds sha256(rawToken) for O(1) indexed lookup on each request.
+model Session {
+  id                String    @id @default(uuid())
+  userId            String
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash         String    @unique
+  createdAt         DateTime  @default(now())
+  expiresAt         DateTime // sliding expiry, extended on refresh
+  absoluteExpiresAt DateTime // hard cap regardless of activity
+  revokedAt         DateTime? // set on logout; a revoked session is never valid
+  lastUsedAt        DateTime?
+  ip                String?
+  userAgent         String?
+
+  @@index([userId])
+  @@map("sessions")
+}

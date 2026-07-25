@@ -1,0 +1,36 @@
+{
+  "name": "second-brain",
+  "version": "0.0.0",
+  "private": true,
+  "description": "AFFiNE-inspired second-brain app: projects with an infinite whiteboard of cards.",
+  "license": "UNLICENSED",
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "scripts": {
+    "dev:server": "npm run start:dev --workspace server",
+    "dev:client": "npm run dev --workspace client",
+    "build": "npm run build --workspace server && npm run build --workspace client",
+    "lint": "eslint .",
+    "typecheck": "npm run typecheck --workspace server && npm run typecheck --workspace client",
+    "format": "prettier --write \"**/*.{ts,tsx,js,cjs,mjs,json,md,yml,yaml}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,cjs,mjs,json,md,yml,yaml}\""
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.7.0",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "eslint-plugin-react-refresh": "0.5.3",
+    "globals": "17.7.0",
+    "prettier": "3.9.6",
+    "typescript-eslint": "8.65.0"
+  },
+  "overrides": {
+    "find-my-way": "9.7.0"
+  }
+}
