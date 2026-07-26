@@ -1,0 +1,272 @@
+/* Cards (Phase 5a) — an un-clipped rotated wrapper + a clipped shape body */
+.whiteboard__card-wrapper {
+  position: absolute;
+  box-sizing: border-box;
+  transform-origin: center;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+.whiteboard__card-wrapper.dragging {
+  cursor: grabbing;
+}
+
+.whiteboard__card-body {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  padding: 0.5rem 0.6rem;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+}
+
+.whiteboard__card-wrapper.dragging .whiteboard__card-body {
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.28);
+}
+
+/* Shapes */
+.shape-card {
+  border-radius: 10px;
+}
+.shape-rectangle {
+  border-radius: 0;
+}
+.shape-ellipse {
+  border-radius: 50%;
+}
+.shape-diamond {
+  border: none;
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+  box-shadow: none;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.25));
+}
+.shape-triangle {
+  border: none;
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+  box-shadow: none;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.25));
+}
+
+.shape-centered .whiteboard__card-content,
+.shape-centered .whiteboard__card-textarea {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.shape-triangle .whiteboard__card-content,
+.shape-triangle .whiteboard__card-textarea {
+  align-items: flex-end;
+  padding-bottom: 0.3rem;
+}
+
+.whiteboard__card-content {
+  height: 100%;
+  margin: 0;
+  font-size: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow: hidden;
+}
+
+.whiteboard__card-placeholder {
+  opacity: 0.5;
+  font-style: italic;
+}
+
+.whiteboard__card-textarea {
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: none;
+  outline: none;
+  resize: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: inherit;
+  user-select: text;
+}
+
+.whiteboard__card-delete {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  z-index: 1;
+  padding: 0 0.4rem;
+  line-height: 1.4;
+  font-size: 1rem;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.whiteboard__card-wrapper:hover .whiteboard__card-delete,
+.whiteboard__card-wrapper:focus-within .whiteboard__card-delete {
+  opacity: 1;
+}
+
+/* Selection outline + resize/rotate handles */
+.whiteboard__card-selection {
+  position: absolute;
+  inset: -2px;
+  border: 1px solid var(--accent);
+  pointer-events: none;
+}
+
+.whiteboard__resize-handle {
+  position: absolute;
+  z-index: 2;
+  width: 10px;
+  height: 10px;
+  margin: -5px;
+  background: #fff;
+  border: 1px solid var(--accent);
+  border-radius: 2px;
+}
+.handle-nw {
+  top: 0;
+  left: 0;
+  cursor: nwse-resize;
+}
+.handle-n {
+  top: 0;
+  left: 50%;
+  cursor: ns-resize;
+}
+.handle-ne {
+  top: 0;
+  left: 100%;
+  cursor: nesw-resize;
+}
+.handle-e {
+  top: 50%;
+  left: 100%;
+  cursor: ew-resize;
+}
+.handle-se {
+  top: 100%;
+  left: 100%;
+  cursor: nwse-resize;
+}
+.handle-s {
+  top: 100%;
+  left: 50%;
+  cursor: ns-resize;
+}
+.handle-sw {
+  top: 100%;
+  left: 0;
+  cursor: nesw-resize;
+}
+.handle-w {
+  top: 50%;
+  left: 0;
+  cursor: ew-resize;
+}
+
+.whiteboard__rotate-handle {
+  position: absolute;
+  z-index: 2;
+  top: -28px;
+  left: 50%;
+  width: 12px;
+  height: 12px;
+  margin-left: -6px;
+  background: #fff;
+  border: 1px solid var(--accent);
+  border-radius: 50%;
+  cursor: grab;
+}
+.whiteboard__rotate-handle::before {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  width: 1px;
+  height: 16px;
+  background: var(--accent);
+  transform: translateX(-50%);
+}
+
+/* Selection toolbar (fixed, top-centre) — shared by cards and connections */
+.whiteboard__selection-toolbar {
+  position: fixed;
+  top: 0.75rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  max-width: calc(100vw - 1.5rem);
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, Canvas 82%, transparent);
+  backdrop-filter: blur(6px);
+}
+
+.whiteboard__swatches {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.whiteboard__swatch {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  cursor: pointer;
+}
+.whiteboard__swatch[aria-pressed='true'] {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.whiteboard__color-input {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+}
+
+.whiteboard__shapes {
+  display: flex;
+  gap: 0.2rem;
+}
+
+.whiteboard__shape-btn {
+  padding: 0.25rem 0.45rem;
+  font-size: 1rem;
+  line-height: 1;
+}
+.whiteboard__shape-btn[aria-pressed='true'] {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.whiteboard__fontsize {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.whiteboard__fontsize-btn {
+  padding: 0.25rem 0.4rem;
+  line-height: 1;
+}
+
+.whiteboard__fontsize-value {
+  min-width: 1.6rem;
+  text-align: center;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}

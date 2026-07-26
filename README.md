@@ -4,7 +4,8 @@ An AFFiNE-inspired "second brain" app: each **project** contains an infinite,
 pannable/zoomable **whiteboard** of freely-positioned **cards**. Built local-first
 in spirit, security-first in practice.
 
-> **Status:** Phase 4 (cards — CRUD, drag/edit/delete, wired into the uniform-grid spatial index) complete.
+> **Status:** Phase 5b (relation arrows — connect cards with live-tracking directed arrows) complete;
+> builds on Phase 5a rich cards (colour, shapes, rotation, resize, text size, selection).
 > See [`docs/PROGRESS.md`](docs/PROGRESS.md) — the single source of truth for
 > project history and the full Architecture Decision Record (ADR).
 

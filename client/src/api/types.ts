@@ -23,7 +23,22 @@ export interface Card {
   w: number;
   h: number;
   content: string;
+  shape: string;
+  color: string;
+  rotation: number;
+  fontSize: number;
   zIndex: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A directed relation arrow linking two cards within the same project. */
+export interface Connection {
+  id: string;
+  projectId: string;
+  sourceCardId: string;
+  targetCardId: string;
+  color: string;
   createdAt: string;
   updatedAt: string;
 }

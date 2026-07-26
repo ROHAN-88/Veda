@@ -25,9 +25,34 @@ export const ZOOM_SENSITIVITY = 0.0015;
 /** HUD +/- buttons step the zoom by this multiplicative factor. */
 export const ZOOM_STEP = 1.2;
 
-/** Background-grid line colour (adapts to light/dark via currentColor). */
-export const GRID_LINE_COLOR = 'color-mix(in srgb, currentColor 12%, transparent)';
+/** Background-grid line colour — a fixed light gray, kept visible on the white board. */
+export const GRID_LINE_COLOR = 'rgba(0, 0, 0, 0.08)';
 
 /** Default card dimensions in world px — must match the Prisma schema defaults. */
 export const DEFAULT_CARD_W = 240;
 export const DEFAULT_CARD_H = 160;
+
+/** Card resize limits in world px — mirror the server card-bounds SIZE_MIN/MAX. */
+export const SIZE_MIN = 40;
+export const SIZE_MAX = 10_000;
+
+/** Selection-handle sizing (world px; handles scale with zoom in Phase 5a). */
+export const RESIZE_HANDLE_PX = 10;
+export const ROTATE_HANDLE_OFFSET_PX = 28;
+
+/** Card text size (world px) — mirror the server card-bounds FONT_SIZE_MIN/MAX. */
+export const DEFAULT_FONT_SIZE = 14;
+export const FONT_SIZE_MIN = 8;
+export const FONT_SIZE_MAX = 96;
+export const FONT_SIZE_STEP = 2;
+
+/**
+ * Relation arrows (Phase 5b). Rendered in a NON-transformed screen-space SVG, so
+ * these are constant screen px. `DEFAULT_CONNECTION_COLOR` mirrors the server
+ * default (slate-500). Ports are the connect dots shown on a selected card.
+ */
+export const DEFAULT_CONNECTION_COLOR = '#64748b';
+export const CONNECT_PORT_PX = 11;
+export const ARROW_HEAD_PX = 13;
+export const CONNECTION_STROKE_PX = 2;
+export const CONNECTION_HIT_STROKE_PX = 14;

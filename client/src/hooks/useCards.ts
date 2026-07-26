@@ -77,6 +77,11 @@ export function useDeleteCard(projectId: string) {
         queryClient.setQueryData(cardsKey(projectId), context.previous);
       }
     },
-    onSettled: () => void queryClient.invalidateQueries({ queryKey: cardsKey(projectId) }),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: cardsKey(projectId) });
+      // Deleting a card cascades its relation arrows server-side (Phase 5b) —
+      // refetch connections so the removed arrows leave the UI too.
+      void queryClient.invalidateQueries({ queryKey: ['connections', projectId] });
+    },
   });
 }

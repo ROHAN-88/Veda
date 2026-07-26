@@ -502,6 +502,203 @@ follow-ups above).
 
 ---
 
+## Phase 5a — Rich Cards: Color, Shapes, Rotation, Resize & Selection — 2026-07-26
+
+> Note: at the user's direction, Phase 5 became a feature expansion (rich cards + relation
+> arrows) rather than the hardening pass the Phase 4 gate anticipated. This is **Phase 5a**
+> (rich cards); **Phase 5b** (relation arrows) follows. Hardening moves to a later phase.
+
+### What was done
+
+- Cards are now **rich nodes**: per-card **fill colour** (8-swatch palette **+** a native
+  custom colour picker; new cards cycle the palette so a board isn't all one colour, and body
+  text auto-contrasts by luminance), **five shapes** (card/rounded-rect, rectangle,
+  ellipse/circle, diamond, triangle — all text-capable), free **rotation** (drag handle;
+  Shift-snaps to 15°), and **resize** via 8 handles that respect rotation.
+- A **selection** model: click a card to select it (shows an outline, resize/rotate handles, and
+  a fixed top-centre **toolbar** for colour/shape/delete); click empty canvas or press Escape to
+  deselect.
+
+### How it was done
+
+- **Backend** extends the existing `Card`: `shape String @default("card")`, `color String
+@default("#ffffff")`, `rotation Float @default(0)` (migration `20260726033408_add_card_style`,
+  additive + backfilled). Validated server-side — `shape @IsIn(SHAPES)`, `color @Matches(/^#[0-9a-fA-F]{6}$/)`,
+  `rotation` finite + `@Min(-360)/@Max(360)` — in both mirror DTOs, with the limits centralised in
+  `dto/card-bounds.ts`. The service passes the fields through (Prisma applies defaults when absent);
+  no controller/route change.
+- **Rotation-aware resize is pure + unit-tested** (`canvas/cardResize.ts`): `resizeCard` keeps the
+  corner/edge OPPOSITE the dragged handle pinned in world space by working in the card's local
+  (unrotated) frame; `rotateCard` maps a pointer angle to degrees (Shift-snap). Tests assert the
+  anchor-fixed invariant at 0° AND 90°, plus min/max clamp and the rotate angle/snap math.
+- **CardView restructured** into an un-clipped rotated wrapper (position/rotation/handlers) holding
+  a clipped shape body (fill + auto-contrast text) + the delete button + (when selected) the
+  handles — so `clip-path`/`overflow:hidden` never clips the chrome. Drag/resize/rotate each feed a
+  single transient `preview` and commit **one optimistic PATCH on release** (ADR D10); the
+  optimistic update is applied synchronously so the commit batches with clearing the preview (no
+  flicker). Interaction split into `hooks/useCardDrag` + `hooks/useCardResize` + `canvas/CardHandles`.
+- **Selection** is a small Zustand store (`store/selectionStore.ts`) — narrow subscription means only
+  the two cards whose selected-ness flips re-render. The toolbar reads the live card from the React
+  Query cache, so it survives culling and reflects optimistic edits instantly. Handles/toolbar carry
+  `data-no-pan`, so the canvas never pans during a card gesture; the selected card is always kept in
+  the culling set so its handles never vanish at a viewport edge.
+
+### What changed
+
+- **No new dependencies** (native `<input type="color">` + CSS `clip-path`/`border-radius`).
+  `audit-ci` stays green.
+- **Schema/migration:** `Card` += `shape/color/rotation`; migration `add_card_style`.
+- **New files:** `client/src/canvas/{cardShapes(+test),cardResize(+test),CardHandles,SelectionToolbar}.ts(x)`,
+  `client/src/hooks/{useCardDrag,useCardResize}.ts`, `client/src/store/selectionStore.ts`.
+- **Edited:** `CardView`/`CardsLayer`/`WhiteboardCanvas`/`constants`/`index.css`; `api/types.ts` +
+  `api/cards.ts` (three fields); the two backend DTOs + `card-bounds.ts` + `cards.service.ts` + the
+  two card test files.
+- **Breaking:** none.
+
+### Security notes (Phase 5a scope)
+
+- **CWE-20 (input validation):** `color` (hex `@Matches`), `shape` (`@IsIn` allowlist), `rotation`
+  (finite + bounded) validated server-side; `whitelist`/`forbidNonWhitelisted` strip unknown props.
+  `color` is only ever a CSS value and `shape` a fixed class-name lookup — **no injection surface**.
+- **A03 / CWE-79:** content stays plain text via React escaping; no `dangerouslySetInnerHTML`.
+- **A01 IDOR** unchanged (`{ id, projectId, project:{ ownerId } }`); no new routes. No new deps.
+
+### Verification (Phase 5a)
+
+| Check                     | Result                                                          |
+| ------------------------- | --------------------------------------------------------------- |
+| `prisma migrate dev`      | ✅ `add_card_style` applied + backfilled                        |
+| format / lint / typecheck | ✅ all pass (server + client)                                   |
+| build (server + client)   | ✅                                                              |
+| Unit tests                | ✅ **server 23** (+1 cards) · **client 43** (+11 resize/shapes) |
+| e2e tests (vs Postgres)   | ✅ **18** (+1 card-style persistence; +4 style validation 400s) |
+| `audit-ci` gate           | ✅ no un-allowlisted high/critical — **no new dependencies**    |
+| 500-line/file cap         | ✅ all source files well under (largest CardView 127)           |
+
+### Residual risks / follow-ups
+
+- Resize/rotate handles **scale with zoom** (they live inside the world transform). Documented clean
+  follow-up: a `--inv-zoom` CSS var to pin them to constant screen size. CSS resize cursors don't
+  track arbitrary rotation (acceptable).
+- Culling uses each card's axis-aligned `x,y,w,h` (rotation ignored); the padded viewport
+  over-includes, so a rotated corner is never dropped early.
+- `client/src/index.css` is at ~486 lines (approaching the 500 cap) — split into per-area sheets in
+  Phase 5b.
+- Bring-to-front `zIndex` race, no markdown, prior waivers — unchanged from Phase 4.
+
+### Follow-up — per-card text size (2026-07-26)
+
+- Added a **`fontSize Int @default(14)`** field to `Card` (migration `20260726034849_add_card_font_size`,
+  additive + backfilled), validated `@IsInt @Min(8) @Max(96)` in both DTOs (bounds in `card-bounds.ts`);
+  the service passes it through. Applied inline on the card body (`.whiteboard__card-content`/`-textarea`
+  switched to `font-size: inherit` so it cascades), controlled by an **A− / value / A+** stepper in the
+  selection toolbar (steps 2 px, clamped by a pure, unit-tested `clampFontSize`). No new deps; `fontSize`
+  is only ever a CSS value (no injection surface). Tests: +1 client unit (44 total); server unit 23 and
+  e2e 18 unchanged in count (fontSize folded into the existing style-persistence + validation cases).
+
+### Phase gate
+
+Phase 5a is complete. **Awaiting explicit approval to begin Phase 5b** (relation arrows: a
+`Connection` entity + live-tracking straight-line SVG connectors between cards, mirroring the cards
+module for per-user/per-project IDOR).
+
+---
+
+## Phase 5b — Relation Arrows (card-to-card connections) — 2026-07-26
+
+### What was done
+
+- Cards can now be **connected by a directed arrow**. Select a card → four **connect ports** appear
+  on its edges; **drag from a port onto another card** to link them (a rubber-band arrow follows the
+  cursor and drops to create the connection).
+- Arrows **re-anchor live**: dragging, resizing, or rotating either endpoint card moves the arrow
+  with it in real time — not just on gesture-end. Endpoints are trimmed to each card's border so the
+  arrowhead touches the edge.
+- **Recolour + delete:** click an arrow to select it (highlighted); a top-centre toolbar recolours it
+  (palette + custom picker) or deletes it. Deleting a card removes its arrows (DB cascade), and the
+  UI reflects it immediately.
+
+### How it was done
+
+- **Backend** mirrors the cards module: a new `Connection` model (`projectId`, `sourceCardId`,
+  `targetCardId`, `color`; migration `20260726044646_add_connections`) with **three `onDelete:
+Cascade` FKs** (project + both endpoint cards → no orphans) and a `@@unique([sourceCardId,
+targetCardId])` (one arrow per ordered pair; A→B ≠ B→A). New `src/connections/` module
+  (controller/service/DTOs) under `/api/projects/:projectId/connections`, registered after
+  `CardsModule`. The service reuses the exact per-user + per-project IDOR filter
+  (`{ id, projectId, project:{ ownerId } }` → 404); `create` verifies **both** endpoint cards live in
+  the same owned project, rejects self-links (400), and maps the unique violation to 409.
+- **Live tracking** is the one net-new architectural piece: a small Zustand `liveRectStore` keyed by
+  card id. `CardView`'s drag/resize/rotate preview now also writes/clears this store (additive — the
+  card's own paint and the tested commit flow are unchanged), so `ConnectionsLayer` can read a card's
+  in-gesture geometry. Committed positions still come from the React Query cache.
+- **Rendering** is a non-transformed, full-viewport SVG sibling of the world layer (like
+  `BackgroundGrid`): each endpoint is converted world→screen, giving constant stroke width and
+  reliable hit-testing on the otherwise-thin lines (a 0×0 in-world SVG makes clicks flaky). Border
+  trimming + the arrowhead polygon are pure and unit-tested (`canvas/connectionGeometry.ts`).
+- **Creation** uses a `connectionDraftStore` + `useConnectionDraft` (window-listener gesture, same
+  technique as `useCardResize`): a port's pointer-down starts a draft; on release the drop target is
+  resolved via `elementFromPoint` + a `data-card-id` on each card, then the connection is created
+  (server remains the authority — self→400, duplicate→409).
+- **Selection** was unified: `selectionStore` now holds either a `selectedId` (card) or a
+  `selectedConnectionId` (arrow), mutually exclusive.
+
+### What changed
+
+- **No new dependencies** (native SVG). `audit-ci` stays green.
+- **Schema/migration:** new `Connection` model + `add_connections` migration; back-relations on
+  `Card`/`Project`.
+- **`index.css` split** to honour the 500-line cap (it had reached 565): rules moved into
+  `styles/base.css` + `canvas/{whiteboard,cards,connections}.css`, aggregated by an `@import`
+  manifest in `index.css` (cascade order preserved).
+- **New files:** `server/src/connections/**` (module/controller/service/DTOs + spec) and
+  `test/connections.e2e-spec.ts`; `client/src/api/connections.ts`, `hooks/{useConnections,
+useConnectionDraft}.ts`, `store/{liveRectStore(+test),connectionDraftStore}.ts`,
+  `canvas/{ConnectionsLayer,ConnectionToolbar,connectionGeometry(+test)}.tsx?`, the four CSS partials.
+- **Edited:** `CardView`/`CardHandles`/`WhiteboardCanvas`/`constants`/`selectionStore`/`useCards`
+  (cascade invalidation); `api/types.ts`.
+- **Breaking:** none.
+
+### Security notes (Phase 5b scope)
+
+- **A01 IDOR / CWE-639:** connection routes are session-guarded and relation-filtered
+  (`{ id, projectId, project:{ ownerId } }` → 404, never 403). `create` additionally checks **both**
+  endpoint cards belong to the caller's project — no cross-project or cross-user linking.
+- **Integrity:** cascade FKs guarantee no orphan arrows; the client invalidates the connections query
+  after a card delete.
+- **CWE-20 (input validation):** endpoint ids `@IsUUID`, `color @Matches(/^#[0-9a-fA-F]{6}$/)`;
+  `whitelist`/`forbidNonWhitelisted` strip unknowns; self-link → 400, duplicate → 409. `color` is only
+  ever an SVG `stroke` value — no injection surface.
+
+### Verification (Phase 5b)
+
+| Check                     | Result                                                             |
+| ------------------------- | ------------------------------------------------------------------ |
+| `prisma migrate dev`      | ✅ `add_connections` applied (3 cascade FKs + unique pair)         |
+| format / lint / typecheck | ✅ all pass (server + client)                                      |
+| build (server + client)   | ✅                                                                 |
+| Unit tests                | ✅ **server 33** (+10 connections) · **client 55** (+11 geo/store) |
+| e2e tests (vs Postgres)   | ✅ **25** (+7: CRUD, IDOR, cross-project, self/dup, cascade, 400)  |
+| `audit-ci` gate           | ✅ no un-allowlisted high/critical — **no new dependencies**       |
+| 500-line/file cap         | ✅ all source files well under; `index.css` split (largest 272)    |
+
+### Residual risks / follow-ups
+
+- Arrows are straight lines between AABB borders (rotation ignored for the anchor box, matching
+  `cardBounds`); curved/orthogonal routing and multi-select are future work.
+- Connect ports and the arrow layer are pointer-only (no keyboard path) — consistent with the current
+  canvas a11y posture; a keyboard/AT story for the whole board remains a later pass.
+- The live-rect mirror keeps two sources of truth during a gesture (local `preview` + `liveRectStore`)
+  by design, to leave the tested drag/commit flow untouched; unifying them is a clean follow-up.
+
+### Phase gate
+
+Phase 5b is complete. **Awaiting explicit approval to begin the next phase** (candidates: the deferred
+hardening pass — bring-to-front `zIndex` race, handle/port constant-screen-size via `--inv-zoom`,
+markdown/rich content — or another feature the user prioritises).
+
+---
+
 ## Research findings — AFFiNE / BlockSuite
 
 Legend: **[V]** verified from the cited repo/docs · **[I]** reasoned inference.

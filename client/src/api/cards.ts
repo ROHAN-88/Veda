@@ -7,6 +7,10 @@ export interface CreateCardInput {
   w?: number;
   h?: number;
   content?: string;
+  shape?: string;
+  color?: string;
+  rotation?: number;
+  fontSize?: number;
 }
 
 export interface UpdateCardInput {
@@ -16,6 +20,10 @@ export interface UpdateCardInput {
   h?: number;
   content?: string;
   zIndex?: number;
+  shape?: string;
+  color?: string;
+  rotation?: number;
+  fontSize?: number;
 }
 
 const base = (projectId: string): string => `/projects/${encodeURIComponent(projectId)}/cards`;

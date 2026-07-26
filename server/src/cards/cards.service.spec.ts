@@ -68,6 +68,21 @@ describe('CardsService', () => {
     expect(mock.card.create.mock.calls[0][0]).toMatchObject({ data: { zIndex: 5 } });
   });
 
+  it('create() forwards shape/color/rotation/fontSize when provided', async () => {
+    const mock = createPrismaMock();
+    await makeService(mock).create('user-1', 'proj-1', {
+      x: 0,
+      y: 0,
+      shape: 'diamond',
+      color: '#ff8800',
+      rotation: 45,
+      fontSize: 24,
+    });
+    expect(mock.card.create.mock.calls[0][0]).toMatchObject({
+      data: { shape: 'diamond', color: '#ff8800', rotation: 45, fontSize: 24 },
+    });
+  });
+
   it('getOwned() scopes by id + projectId + owner and 404s when missing', async () => {
     const mock = createPrismaMock();
     mock.card.findFirst.mockResolvedValue(null);

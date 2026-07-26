@@ -1,10 +1,26 @@
 import { Transform } from 'class-transformer';
-import { IsInt, IsNumber, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import {
+  IsIn,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Matches,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 import {
   CONTENT_MAX,
   COORD_MAX,
   COORD_MIN,
   FINITE,
+  FONT_SIZE_MAX,
+  FONT_SIZE_MIN,
+  HEX_COLOR,
+  ROTATION_MAX,
+  ROTATION_MIN,
+  SHAPES,
   SIZE_MAX,
   SIZE_MIN,
   ZINDEX_MAX,
@@ -51,4 +67,25 @@ export class UpdateCardDto {
   @Min(0)
   @Max(ZINDEX_MAX)
   zIndex?: number;
+
+  @IsOptional()
+  @IsIn(SHAPES)
+  shape?: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(HEX_COLOR, { message: 'color must be a #rrggbb hex string' })
+  color?: string;
+
+  @IsOptional()
+  @IsNumber(FINITE)
+  @Min(ROTATION_MIN)
+  @Max(ROTATION_MAX)
+  rotation?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(FONT_SIZE_MIN)
+  @Max(FONT_SIZE_MAX)
+  fontSize?: number;
 }

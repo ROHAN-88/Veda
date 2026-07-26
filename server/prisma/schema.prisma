@@ -40,19 +40,17 @@ model Project {
   id        String   @id @default(uuid())
   ownerId   String
   owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  name      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  cards     Card[]
+  name        String
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  cards       Card[]
+  connections Connection[]
 
   @@index([ownerId])
   @@map("projects")
 }
 
-/// A card on a project's whiteboard. Positioned in unbounded float world space
-/// (x,y = top-left; w,h = extent). `content` is PLAIN TEXT, rendered via React
-/// escaping only (no HTML). `zIndex` is an integer stacking order; the server
-/// assigns max+1 on create. Deleted when its project (or the owner) is deleted.
+
 model Card {
   id        String   @id @default(uuid())
   projectId String
@@ -62,12 +60,44 @@ model Card {
   w         Float    @default(240)
   h         Float    @default(160)
   content   String   @default("")
+  shape     String   @default("card")
+  color     String   @default("#ffffff")
+  rotation  Float    @default(0)
+  fontSize  Int      @default(14)
   zIndex    Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Relation arrows anchored to this card (Phase 5b). Cascade on delete so a
+  // removed card takes its arrows with it — no orphan connections.
+  outgoing Connection[] @relation("ConnectionSource")
+  incoming Connection[] @relation("ConnectionTarget")
+
   @@index([projectId])
   @@map("cards")
+}
+
+/// A directed relation arrow linking two cards within the same project.
+/// Ownership is enforced through the project relation (per-user IDOR), mirroring
+/// the Card model. Deleting either endpoint card (or the project) cascades.
+model Connection {
+  id           String  @id @default(uuid())
+  projectId    String
+  project      Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sourceCardId String
+  sourceCard   Card    @relation("ConnectionSource", fields: [sourceCardId], references: [id], onDelete: Cascade)
+  targetCardId String
+  targetCard   Card    @relation("ConnectionTarget", fields: [targetCardId], references: [id], onDelete: Cascade)
+  color        String  @default("#64748b")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // One arrow per ordered pair; A->B and B->A remain distinct.
+  @@unique([sourceCardId, targetCardId])
+  @@index([projectId])
+  @@index([targetCardId])
+  @@map("connections")
 }
 
 /// A server-side session. The raw token lives only in the client cookie; the

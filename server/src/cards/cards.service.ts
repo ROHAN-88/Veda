@@ -46,6 +46,10 @@ export class CardsService {
         w: dto.w,
         h: dto.h,
         content: dto.content,
+        shape: dto.shape,
+        color: dto.color,
+        rotation: dto.rotation,
+        fontSize: dto.fontSize,
         zIndex: nextZIndex,
       },
     });

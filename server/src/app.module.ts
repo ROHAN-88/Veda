@@ -9,6 +9,7 @@ import { SecurityModule } from './common/security/security.module';
 import { validateEnv } from './config/env.validation';
 import { HealthModule } from './health/health.module';
 import { CardsModule } from './cards/cards.module';
+import { ConnectionsModule } from './connections/connections.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProjectsModule } from './projects/projects.module';
 
@@ -36,6 +37,7 @@ import { ProjectsModule } from './projects/projects.module';
     AuthModule,
     ProjectsModule,
     CardsModule,
+    ConnectionsModule,
     HealthModule,
   ],
   providers: [

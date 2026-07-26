@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE "cards" ADD COLUMN     "color" TEXT NOT NULL DEFAULT '#ffffff',
+ADD COLUMN     "rotation" DOUBLE PRECISION NOT NULL DEFAULT 0,
+ADD COLUMN     "shape" TEXT NOT NULL DEFAULT 'card';

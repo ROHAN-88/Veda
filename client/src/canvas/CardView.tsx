@@ -1,14 +1,29 @@
-import { memo, useRef, useState } from 'react';
-import type { KeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent } from 'react';
-import { applyDragDelta } from './cardGeometry';
+import { memo, useCallback, useEffect, useState } from 'react';
+import type {
+  KeyboardEvent,
+  MouseEvent as ReactMouseEvent,
+  PointerEvent as ReactPointerEvent,
+} from 'react';
+import { CardHandles } from './CardHandles';
+import type { CardRect } from './cardResize';
+import { contrastingTextColor, SHAPE_CLASS, toCardShape } from './cardShapes';
+import { screenToWorld } from './coordinates';
 import type { Vec2 } from './types';
 import type { Card } from '../api/types';
+import { useCardDrag } from '../hooks/useCardDrag';
+import { useCardResize } from '../hooks/useCardResize';
 import { useDebouncedCallback } from '../hooks/useDebouncedCallback';
+import { useConnectionDraftStore } from '../store/connectionDraftStore';
+import { useLiveRectStore } from '../store/liveRectStore';
 import { useViewportStore } from '../store/viewportStore';
 
 interface CardViewProps {
   card: Card;
+  selected: boolean;
+  onSelect: (id: string) => void;
   onMove: (id: string, pos: Vec2) => void;
+  onResize: (id: string, bounds: { x: number; y: number; w: number; h: number }) => void;
+  onRotate: (id: string, deg: number) => void;
   onEditContent: (id: string, content: string) => void;
   onBringToFront: (id: string) => void;
   onDelete: (id: string) => void;
@@ -16,135 +31,152 @@ interface CardViewProps {
   onDragEnd: () => void;
 }
 
+const CENTERED_SHAPES = new Set(['ellipse', 'diamond', 'triangle']);
+
 /**
- * One card: a world-positioned DOM node (`data-no-pan` keeps the canvas from
- * panning while it's grabbed). Drag moves it (committed on release), double-click
- * edits the plain-text content (debounced save), and the × button deletes it.
- * Content is rendered as escaped React text — no `dangerouslySetInnerHTML`.
+ * A card node: an un-clipped rotated wrapper (position + rotation + handlers)
+ * holding a clipped shape body (fill colour + auto-contrast text), the delete
+ * button, and — when selected — the resize/rotate handles. Content is escaped
+ * plain text (no `dangerouslySetInnerHTML`).
  */
-function CardViewImpl({
-  card,
-  onMove,
-  onEditContent,
-  onBringToFront,
-  onDelete,
-  onDragStart,
-  onDragEnd,
-}: CardViewProps) {
-  // Transient drag offset (world px) while a drag is active. On release the
-  // optimistic move commit (useUpdateCard applies it synchronously) lands in the
-  // same render batch as clearing this, so the card doesn't flicker back.
-  const [offset, setOffset] = useState<Vec2 | null>(null);
+function CardViewImpl(props: CardViewProps) {
+  const { card, selected } = props;
+  const [preview, setLocalPreview] = useState<CardRect | null>(null);
   const [editing, setEditing] = useState(false);
-  const drag = useRef<{ pointerId: number; startX: number; startY: number } | null>(null);
+
+  // Drive the card's own paint AND mirror the live geometry into the shared store
+  // so the arrow layer can re-anchor connections to this card while it moves.
+  const setPreview = useCallback(
+    (rect: CardRect | null) => {
+      setLocalPreview(rect);
+      const store = useLiveRectStore.getState();
+      if (rect) {
+        store.setRect(card.id, rect);
+      } else {
+        store.clearRect(card.id);
+      }
+    },
+    [card.id],
+  );
+
+  // Drop any live rect if the card unmounts mid-gesture (e.g. culled).
+  useEffect(() => () => useLiveRectStore.getState().clearRect(card.id), [card.id]);
+
+  // Begin dragging a relation arrow FROM this card (from a connect port).
+  const onConnectStart = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      event.stopPropagation();
+      const { camera, size } = useViewportStore.getState();
+      const world = screenToWorld(camera, size, { x: event.clientX, y: event.clientY });
+      useConnectionDraftStore.getState().begin(card.id, world);
+    },
+    [card.id],
+  );
+
+  const drag = useCardDrag(card, setPreview, {
+    editing,
+    onSelect: props.onSelect,
+    onBringToFront: props.onBringToFront,
+    onDragStart: props.onDragStart,
+    onDragEnd: props.onDragEnd,
+    onMove: props.onMove,
+  });
+  const { beginResize, beginRotate } = useCardResize(card, setPreview, {
+    onResize: props.onResize,
+    onRotate: props.onRotate,
+  });
 
   const [saveContent, flushContent, cancelContent] = useDebouncedCallback(
-    (value: string) => onEditContent(card.id, value),
+    (value: string) => props.onEditContent(card.id, value),
     400,
   );
 
-  const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0 || editing) {
-      return;
-    }
-    event.stopPropagation();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    drag.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY };
-    onBringToFront(card.id);
-    onDragStart(card.id);
-    setOffset({ x: 0, y: 0 });
-  };
-
-  const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
-    const state = drag.current;
-    if (!state || event.pointerId !== state.pointerId) {
-      return;
-    }
-    const zoom = useViewportStore.getState().camera.zoom;
-    setOffset(
-      applyDragDelta(
-        { x: 0, y: 0 },
-        { x: event.clientX - state.startX, y: event.clientY - state.startY },
-        zoom,
-      ),
-    );
-  };
-
-  const endDrag = (event: PointerEvent<HTMLDivElement>) => {
-    const state = drag.current;
-    if (!state || event.pointerId !== state.pointerId) {
-      return;
-    }
-    try {
-      event.currentTarget.releasePointerCapture(state.pointerId);
-    } catch {
-      // already released — ignore
-    }
-    drag.current = null;
-    if (offset && (offset.x !== 0 || offset.y !== 0)) {
-      onMove(card.id, { x: card.x + offset.x, y: card.y + offset.y });
-    }
-    setOffset(null);
-    onDragEnd();
-  };
-
-  const startEditing = (event: ReactMouseEvent<HTMLDivElement>) => {
+  const startEditing = (event: ReactMouseEvent<HTMLDivElement>): void => {
     event.stopPropagation(); // don't let the canvas create a new card under us
     setEditing(true);
   };
 
-  const onTextareaKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+  const onTextareaKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
     if (event.key === 'Escape') {
       cancelContent();
       setEditing(false);
     }
   };
 
-  const left = offset ? card.x + offset.x : card.x;
-  const top = offset ? card.y + offset.y : card.y;
+  const live = preview ?? card;
+  const shape = toCardShape(card.shape);
+  const bodyClass = `whiteboard__card-body ${SHAPE_CLASS[shape]}${
+    CENTERED_SHAPES.has(shape) ? ' shape-centered' : ''
+  }`;
 
   return (
     <div
-      className={`whiteboard__card${offset ? ' dragging' : ''}`}
+      className={`whiteboard__card-wrapper${drag.dragging ? ' dragging' : ''}`}
       data-no-pan
-      style={{ left, top, width: card.w, height: card.h, zIndex: card.zIndex }}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={endDrag}
-      onPointerCancel={endDrag}
+      data-card-id={card.id}
+      style={{
+        left: live.x,
+        top: live.y,
+        width: live.w,
+        height: live.h,
+        transform: `rotate(${live.rotation}deg)`,
+        transformOrigin: 'center',
+        zIndex: card.zIndex,
+      }}
+      onPointerDown={drag.onPointerDown}
+      onPointerMove={drag.onPointerMove}
+      onPointerUp={drag.onPointerUp}
+      onPointerCancel={drag.onPointerUp}
       onDoubleClick={startEditing}
     >
+      <div
+        className={bodyClass}
+        style={{
+          background: card.color,
+          color: contrastingTextColor(card.color),
+          fontSize: `${card.fontSize}px`,
+        }}
+      >
+        {editing ? (
+          <textarea
+            className="whiteboard__card-textarea"
+            data-no-pan
+            autoFocus
+            defaultValue={card.content}
+            onChange={(e) => saveContent(e.target.value)}
+            onBlur={() => {
+              flushContent();
+              setEditing(false);
+            }}
+            onKeyDown={onTextareaKeyDown}
+          />
+        ) : card.content ? (
+          <div className="whiteboard__card-content">{card.content}</div>
+        ) : (
+          <div className="whiteboard__card-content whiteboard__card-placeholder">
+            Double-click to edit
+          </div>
+        )}
+      </div>
       <button
         type="button"
         className="ghost danger whiteboard__card-delete"
         aria-label="Delete card"
+        data-no-pan
         onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => {
           e.stopPropagation();
-          onDelete(card.id);
+          props.onDelete(card.id);
         }}
       >
         ×
       </button>
-      {editing ? (
-        <textarea
-          className="whiteboard__card-textarea"
-          data-no-pan
-          autoFocus
-          defaultValue={card.content}
-          onChange={(e) => saveContent(e.target.value)}
-          onBlur={() => {
-            flushContent();
-            setEditing(false);
-          }}
-          onKeyDown={onTextareaKeyDown}
+      {selected && (
+        <CardHandles
+          onResize={beginResize}
+          onRotate={beginRotate}
+          onConnectStart={onConnectStart}
         />
-      ) : card.content ? (
-        <div className="whiteboard__card-content">{card.content}</div>
-      ) : (
-        <div className="whiteboard__card-content whiteboard__card-placeholder">
-          Double-click to edit
-        </div>
       )}
     </div>
   );

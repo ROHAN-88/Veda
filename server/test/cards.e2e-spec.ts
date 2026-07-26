@@ -167,6 +167,51 @@ describe('Cards (e2e)', () => {
     await alice.get(`/api/projects/${projectA}/cards/${id}`).expect(200);
   });
 
+  it('persists shape/color/rotation and applies defaults', async () => {
+    const agent = await authedAgent();
+    const projectId = await createProject(agent);
+    const cards = `/api/projects/${projectId}/cards`;
+
+    let token = await csrf(agent);
+    const styled = await agent
+      .post(cards)
+      .set('X-CSRF-Token', token)
+      .send({ x: 0, y: 0, shape: 'diamond', color: '#ff8800', rotation: 45, fontSize: 28 })
+      .expect(201);
+    expect(styled.body).toMatchObject({
+      shape: 'diamond',
+      color: '#ff8800',
+      rotation: 45,
+      fontSize: 28,
+    });
+
+    token = await csrf(agent);
+    const plain = await agent
+      .post(cards)
+      .set('X-CSRF-Token', token)
+      .send({ x: 1, y: 1 })
+      .expect(201);
+    expect(plain.body).toMatchObject({
+      shape: 'card',
+      color: '#ffffff',
+      rotation: 0,
+      fontSize: 14,
+    });
+
+    token = await csrf(agent);
+    const patched = await agent
+      .patch(`${cards}/${styled.body.id}`)
+      .set('X-CSRF-Token', token)
+      .send({ shape: 'ellipse', color: '#00ff00', rotation: -90, fontSize: 20 })
+      .expect(200);
+    expect(patched.body).toMatchObject({
+      shape: 'ellipse',
+      color: '#00ff00',
+      rotation: -90,
+      fontSize: 20,
+    });
+  });
+
   it('validates card input (400)', async () => {
     const agent = await authedAgent();
     const projectId = await createProject(agent);
@@ -181,6 +226,31 @@ describe('Cards (e2e)', () => {
       .send({ x: 0, y: 0, content: 'a'.repeat(10_001) })
       .expect(400); // content too long
     await agent.post(cards).set('X-CSRF-Token', token).send({ x: 0, y: 0, w: 10 }).expect(400); // w below min
+    await agent
+      .post(cards)
+      .set('X-CSRF-Token', token)
+      .send({ x: 0, y: 0, shape: 'hexagon' })
+      .expect(400); // bad shape
+    await agent
+      .post(cards)
+      .set('X-CSRF-Token', token)
+      .send({ x: 0, y: 0, color: 'red' })
+      .expect(400); // bad hex
+    await agent
+      .post(cards)
+      .set('X-CSRF-Token', token)
+      .send({ x: 0, y: 0, color: '#fff' })
+      .expect(400); // 3-digit hex
+    await agent
+      .post(cards)
+      .set('X-CSRF-Token', token)
+      .send({ x: 0, y: 0, rotation: 720 })
+      .expect(400); // rotation OOR
+    await agent
+      .post(cards)
+      .set('X-CSRF-Token', token)
+      .send({ x: 0, y: 0, fontSize: 500 })
+      .expect(400); // fontSize OOR
     await agent.get('/api/projects/not-a-uuid/cards').expect(400); // non-UUID project id
   });
 });
