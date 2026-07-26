@@ -1,6 +1,9 @@
 /* Relation arrows (Phase 5b) */
 
-/* Connect ports — 4 dots on a selected card's edges; drag one to another card. */
+/* Connect ports — 4 dots on a selected card's edges; drag one to another card.
+   Counter-scaled by `--inv-zoom` (published on the world layer) to stay a constant
+   screen size + distance. `transform` is left OUT of the transition so it tracks
+   zoom instantly (no lag); only opacity animates. */
 .whiteboard__connect-port {
   position: absolute;
   z-index: 3;
@@ -12,29 +15,28 @@
   border-radius: 50%;
   cursor: crosshair;
   opacity: 0.85;
-  transition:
-    opacity 0.1s ease,
-    transform 0.1s ease;
+  transform: scale(var(--inv-zoom, 1));
+  transition: opacity 0.1s ease;
 }
 .whiteboard__connect-port:hover {
   opacity: 1;
-  transform: scale(1.2);
+  transform: scale(calc(var(--inv-zoom, 1) * 1.2));
 }
 .port-n {
-  top: -12px;
+  top: calc(-12px * var(--inv-zoom, 1));
   left: 50%;
 }
 .port-e {
   top: 50%;
-  left: calc(100% + 12px);
+  left: calc(100% + 12px * var(--inv-zoom, 1));
 }
 .port-s {
-  top: calc(100% + 12px);
+  top: calc(100% + 12px * var(--inv-zoom, 1));
   left: 50%;
 }
 .port-w {
   top: 50%;
-  left: -12px;
+  left: calc(-12px * var(--inv-zoom, 1));
 }
 
 /* Arrow layer — a non-transformed, full-viewport SVG under the cards. */

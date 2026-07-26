@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useState } from 'react';
+import { lazy, memo, Suspense, useCallback, useEffect, useState } from 'react';
 import type {
   KeyboardEvent,
   MouseEvent as ReactMouseEvent,
@@ -8,20 +8,17 @@ import { CardHandles } from './CardHandles';
 import type { CardRect } from './cardResize';
 import { contrastingTextColor, SHAPE_CLASS, toCardShape } from './cardShapes';
 import { screenToWorld } from './coordinates';
-import type { Vec2 } from './types';
 import type { Card } from '../api/types';
-import { useCardDrag } from '../hooks/useCardDrag';
+import { useCardDrag, type CardMove } from '../hooks/useCardDrag';
 import { useCardResize } from '../hooks/useCardResize';
 import { useDebouncedCallback } from '../hooks/useDebouncedCallback';
 import { useConnectionDraftStore } from '../store/connectionDraftStore';
-import { useLiveRectStore } from '../store/liveRectStore';
+import { useLiveRect, useLiveRectStore } from '../store/liveRectStore';
 import { useViewportStore } from '../store/viewportStore';
 
 interface CardViewProps {
   card: Card;
   selected: boolean;
-  onSelect: (id: string) => void;
-  onMove: (id: string, pos: Vec2) => void;
   onResize: (id: string, bounds: { x: number; y: number; w: number; h: number }) => void;
   onRotate: (id: string, deg: number) => void;
   onEditContent: (id: string, content: string) => void;
@@ -29,15 +26,24 @@ interface CardViewProps {
   onDelete: (id: string) => void;
   onDragStart: (id: string) => void;
   onDragEnd: () => void;
+  onGroupMove: (moves: CardMove[]) => void;
 }
 
 const CENTERED_SHAPES = new Set(['ellipse', 'diamond', 'triangle']);
 
+// The Markdown renderer pulls in the remark/micromark stack (~45 kB gzip); load
+// it on demand so the whiteboard shell stays lean. The Suspense fallback shows the
+// raw text until the chunk resolves (once per session), so content never flashes empty.
+const CardMarkdown = lazy(() =>
+  import('./CardMarkdown').then((m) => ({ default: m.CardMarkdown })),
+);
+
 /**
  * A card node: an un-clipped rotated wrapper (position + rotation + handlers)
  * holding a clipped shape body (fill colour + auto-contrast text), the delete
- * button, and — when selected — the resize/rotate handles. Content is escaped
- * plain text (no `dangerouslySetInnerHTML`).
+ * button, and — when selected — the resize/rotate handles. Editing shows the raw
+ * Markdown source in a textarea; the display renders it via `CardMarkdown`
+ * (react-markdown — no `dangerouslySetInnerHTML`, XSS-safe by construction).
  */
 function CardViewImpl(props: CardViewProps) {
   const { card, selected } = props;
@@ -75,11 +81,10 @@ function CardViewImpl(props: CardViewProps) {
 
   const drag = useCardDrag(card, setPreview, {
     editing,
-    onSelect: props.onSelect,
     onBringToFront: props.onBringToFront,
     onDragStart: props.onDragStart,
     onDragEnd: props.onDragEnd,
-    onMove: props.onMove,
+    onGroupMove: props.onGroupMove,
   });
   const { beginResize, beginRotate } = useCardResize(card, setPreview, {
     onResize: props.onResize,
@@ -103,7 +108,10 @@ function CardViewImpl(props: CardViewProps) {
     }
   };
 
-  const live = preview ?? card;
+  // Follow the shared live rect during a GROUP drag (this card may be moving even
+  // though the pointer is on another card); else this card's own drag preview.
+  const liveRect = useLiveRect(card.id);
+  const live = liveRect ?? preview ?? card;
   const shape = toCardShape(card.shape);
   const bodyClass = `whiteboard__card-body ${SHAPE_CLASS[shape]}${
     CENTERED_SHAPES.has(shape) ? ' shape-centered' : ''
@@ -151,7 +159,9 @@ function CardViewImpl(props: CardViewProps) {
             onKeyDown={onTextareaKeyDown}
           />
         ) : card.content ? (
-          <div className="whiteboard__card-content">{card.content}</div>
+          <Suspense fallback={<div className="whiteboard__card-content">{card.content}</div>}>
+            <CardMarkdown source={card.content} />
+          </Suspense>
         ) : (
           <div className="whiteboard__card-content whiteboard__card-placeholder">
             Double-click to edit

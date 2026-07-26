@@ -22,4 +22,9 @@ export const connectionsApi = {
     apiJson(`${base(projectId)}/${encodeURIComponent(id)}`, 'PATCH', input),
   remove: (projectId: string, id: string): Promise<void> =>
     apiJson(`${base(projectId)}/${encodeURIComponent(id)}`, 'DELETE'),
+  // Phase 8: soft-delete / restore for undo/redo of arrow ops.
+  bulkDelete: (projectId: string, ids: string[]): Promise<void> =>
+    apiJson(`${base(projectId)}/bulk-delete`, 'POST', { ids }),
+  bulkRestore: (projectId: string, ids: string[]): Promise<void> =>
+    apiJson(`${base(projectId)}/bulk-restore`, 'POST', { ids }),
 };

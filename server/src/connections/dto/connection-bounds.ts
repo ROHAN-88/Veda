@@ -9,3 +9,6 @@ export const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 
 /** Default arrow colour (slate-500); mirrors the Prisma schema default. */
 export const DEFAULT_CONNECTION_COLOR = '#64748b';
+
+/** Max ids in a bulk delete/restore request (bounds request size, CWE-400). */
+export const BULK_MAX = 500;

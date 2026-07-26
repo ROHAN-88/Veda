@@ -13,6 +13,7 @@
 import { useEffect } from 'react';
 import type { RefObject } from 'react';
 import { ZOOM_SENSITIVITY } from '../canvas/constants';
+import { usePanModeStore } from '../store/panModeStore';
 import { useViewportStore } from '../store/viewportStore';
 
 interface DragState {
@@ -38,8 +39,12 @@ export function usePanZoom<T extends HTMLElement>(ref: RefObject<T | null>): voi
     };
 
     const onPointerDown = (event: PointerEvent) => {
-      if (event.button !== 0 && event.button !== 1) {
-        return; // primary / middle only
+      // Pan on the MIDDLE button, or the LEFT button while Space is held. Plain
+      // left-drag on empty canvas is a selection marquee (see useMarquee), not a pan.
+      const wantsPan =
+        event.button === 1 || (event.button === 0 && usePanModeStore.getState().spaceHeld);
+      if (!wantsPan) {
+        return;
       }
       // Never start a pan when the press begins on an interactive control (HUD).
       const target = event.target as Element | null;

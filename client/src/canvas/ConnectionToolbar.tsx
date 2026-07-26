@@ -1,5 +1,6 @@
 import { PALETTE } from './cardShapes';
-import { useConnections, useDeleteConnection, useUpdateConnection } from '../hooks/useConnections';
+import { useConnectionHistory } from '../hooks/useConnectionHistory';
+import { useConnections } from '../hooks/useConnections';
 import { useDebouncedCallback } from '../hooks/useDebouncedCallback';
 import { useSelectionStore } from '../store/selectionStore';
 
@@ -14,14 +15,13 @@ export function ConnectionToolbar({ projectId }: { projectId: string }) {
   const selectedConnectionId = useSelectionStore((state) => state.selectedConnectionId);
   const clear = useSelectionStore((state) => state.clear);
   const { data: connections = [] } = useConnections(projectId);
-  const { mutate: update } = useUpdateConnection(projectId);
-  const { mutate: remove } = useDeleteConnection(projectId);
+  const { commitDelete, commitRecolor } = useConnectionHistory(projectId);
   const connection = connections.find((c) => c.id === selectedConnectionId) ?? null;
 
-  // Dragging the OS colour picker fires onChange rapidly — debounce the PATCH.
+  // Dragging the OS colour picker fires onChange rapidly — debounce the commit.
   const [setColor, flushColor] = useDebouncedCallback((color: string) => {
     if (connection) {
-      update({ id: connection.id, patch: { color } });
+      commitRecolor(connection.id, color);
     }
   }, 120);
 
@@ -42,7 +42,7 @@ export function ConnectionToolbar({ projectId }: { projectId: string }) {
             style={{ background: swatch }}
             aria-label={`Arrow colour ${swatch}`}
             aria-pressed={current === swatch}
-            onClick={() => update({ id: connection.id, patch: { color: swatch } })}
+            onClick={() => commitRecolor(connection.id, swatch)}
           />
         ))}
         <input
@@ -58,7 +58,7 @@ export function ConnectionToolbar({ projectId }: { projectId: string }) {
         type="button"
         className="ghost danger"
         onClick={() => {
-          remove(connection.id);
+          commitDelete([connection.id]);
           clear();
         }}
       >

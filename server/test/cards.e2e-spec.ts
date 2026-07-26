@@ -109,6 +109,121 @@ describe('Cards (e2e)', () => {
     await agent.get(`${cards}/${id}`).expect(404);
   });
 
+  it('bring-to-front raises a card to the top; zIndex is not client-settable', async () => {
+    const agent = await authedAgent();
+    const projectId = await createProject(agent);
+    const cards = `/api/projects/${projectId}/cards`;
+
+    let token = await csrf(agent);
+    const a = await agent.post(cards).set('X-CSRF-Token', token).send({ x: 0, y: 0 }).expect(201);
+    token = await csrf(agent);
+    const b = await agent.post(cards).set('X-CSRF-Token', token).send({ x: 1, y: 1 }).expect(201);
+    expect(a.body.zIndex).toBe(0);
+    expect(b.body.zIndex).toBe(1);
+
+    // Raise A above B — the server allocates max+1 (= 2), ignoring any client value.
+    token = await csrf(agent);
+    const raised = await agent
+      .post(`${cards}/${a.body.id}/bring-to-front`)
+      .set('X-CSRF-Token', token)
+      .expect(200);
+    expect(raised.body.zIndex).toBe(2);
+    expect(raised.body.zIndex).toBeGreaterThan(b.body.zIndex);
+
+    // zIndex can no longer be set through PATCH (forbidNonWhitelisted → 400).
+    token = await csrf(agent);
+    await agent
+      .patch(`${cards}/${a.body.id}`)
+      .set('X-CSRF-Token', token)
+      .send({ zIndex: 999 })
+      .expect(400);
+  });
+
+  it('soft-deletes then restores a card with the same id + zIndex (bulk-restore)', async () => {
+    const agent = await authedAgent();
+    const projectId = await createProject(agent);
+    const cards = `/api/projects/${projectId}/cards`;
+
+    let token = await csrf(agent);
+    const created = await agent
+      .post(cards)
+      .set('X-CSRF-Token', token)
+      .send({ x: 5, y: 6 })
+      .expect(201);
+    const id = created.body.id as string;
+    const z = created.body.zIndex as number;
+
+    token = await csrf(agent);
+    await agent.delete(`${cards}/${id}`).set('X-CSRF-Token', token).expect(204);
+    await agent.get(`${cards}/${id}`).expect(404); // gone from single-get
+    expect((await agent.get(cards).expect(200)).body).toHaveLength(0); // and from list
+
+    token = await csrf(agent);
+    await agent
+      .post(`${cards}/bulk-restore`)
+      .set('X-CSRF-Token', token)
+      .send({ ids: [id] })
+      .expect(204);
+    const list = await agent.get(cards).expect(200);
+    expect(list.body).toHaveLength(1);
+    expect(list.body[0]).toMatchObject({ id, zIndex: z }); // same id + stacking
+  });
+
+  it('bulk-updates and bulk-deletes many cards; validates the array', async () => {
+    const agent = await authedAgent();
+    const projectId = await createProject(agent);
+    const cards = `/api/projects/${projectId}/cards`;
+    const mk = async (): Promise<string> =>
+      (
+        await agent
+          .post(cards)
+          .set('X-CSRF-Token', await csrf(agent))
+          .send({ x: 0, y: 0 })
+          .expect(201)
+      ).body.id as string;
+    const a = await mk();
+    const b = await mk();
+
+    let token = await csrf(agent);
+    await agent
+      .patch(cards)
+      .set('X-CSRF-Token', token)
+      .send({
+        updates: [
+          { id: a, x: 100 },
+          { id: b, x: 200 },
+        ],
+      })
+      .expect(200);
+    const byId = Object.fromEntries(
+      (await agent.get(cards).expect(200)).body.map((c: { id: string; x: number }) => [c.id, c.x]),
+    );
+    expect(byId[a]).toBe(100);
+    expect(byId[b]).toBe(200);
+
+    token = await csrf(agent);
+    await agent
+      .post(`${cards}/bulk-delete`)
+      .set('X-CSRF-Token', token)
+      .send({ ids: [a, b] })
+      .expect(204);
+    expect((await agent.get(cards).expect(200)).body).toHaveLength(0);
+
+    // Validation: empty list + non-UUID id → 400.
+    token = await csrf(agent);
+    await agent
+      .post(`${cards}/bulk-delete`)
+      .set('X-CSRF-Token', token)
+      .send({ ids: [] })
+      .expect(400);
+    token = await csrf(agent);
+    await agent
+      .post(`${cards}/bulk-restore`)
+      .set('X-CSRF-Token', token)
+      .send({ ids: ['not-a-uuid'] })
+      .expect(400);
+  });
+
   it('prevents cross-user IDOR: user B cannot touch user A cards (404)', async () => {
     const alice = await authedAgent();
     const bob = await authedAgent();
@@ -131,6 +246,27 @@ describe('Cards (e2e)', () => {
     await bob.delete(`${cards}/${id}`).set('X-CSRF-Token', token).expect(404);
     token = await csrf(bob);
     await bob.post(cards).set('X-CSRF-Token', token).send({ x: 0, y: 0 }).expect(404);
+    token = await csrf(bob);
+    await bob.post(`${cards}/${id}/bring-to-front`).set('X-CSRF-Token', token).expect(404);
+    // Bulk routes verify EACH id is owned — Alice's card id → 404 for Bob.
+    token = await csrf(bob);
+    await bob
+      .patch(cards)
+      .set('X-CSRF-Token', token)
+      .send({ updates: [{ id, x: 1 }] })
+      .expect(404);
+    token = await csrf(bob);
+    await bob
+      .post(`${cards}/bulk-delete`)
+      .set('X-CSRF-Token', token)
+      .send({ ids: [id] })
+      .expect(404);
+    token = await csrf(bob);
+    await bob
+      .post(`${cards}/bulk-restore`)
+      .set('X-CSRF-Token', token)
+      .send({ ids: [id] })
+      .expect(404);
 
     const still = await alice.get(`${cards}/${id}`).expect(200);
     expect(still.body.content).toBe('secret');

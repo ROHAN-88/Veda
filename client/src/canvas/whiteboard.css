@@ -29,6 +29,15 @@
   will-change: transform;
 }
 
+/* Rubber-band selection box (Phase 8) — screen-space, above the world layer. */
+.whiteboard__marquee {
+  position: absolute;
+  z-index: 1;
+  border: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  pointer-events: none;
+}
+
 .whiteboard__hud {
   position: absolute;
   right: 1rem;

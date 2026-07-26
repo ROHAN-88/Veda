@@ -3,6 +3,7 @@ import { screenToWorld } from '../canvas/coordinates';
 import type { Connection } from '../api/types';
 import { useConnectionDraftStore } from '../store/connectionDraftStore';
 import { useViewportStore } from '../store/viewportStore';
+import { useConnectionHistory } from './useConnectionHistory';
 import { useConnections, useCreateConnection } from './useConnections';
 
 /**
@@ -21,6 +22,7 @@ export function useConnectionDraft(projectId: string): void {
   const clear = useConnectionDraftStore((state) => state.clear);
   const { data: connections = [] } = useConnections(projectId);
   const { mutate: createConnection } = useCreateConnection(projectId);
+  const { pushCreate } = useConnectionHistory(projectId);
 
   // Latest connections without re-attaching listeners on every refetch.
   const connectionsRef = useRef<Connection[]>(connections);
@@ -43,7 +45,10 @@ export function useConnectionDraft(projectId: string): void {
         (conn) => conn.sourceCardId === sourceId && conn.targetCardId === targetId,
       );
       if (targetId && targetId !== sourceId && !alreadyLinked) {
-        createConnection({ sourceCardId: sourceId, targetCardId: targetId });
+        createConnection(
+          { sourceCardId: sourceId, targetCardId: targetId },
+          { onSuccess: (conn) => pushCreate(conn.id) },
+        );
       }
       clear();
     };
@@ -53,5 +58,5 @@ export function useConnectionDraft(projectId: string): void {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
     };
-  }, [sourceId, move, clear, createConnection]);
+  }, [sourceId, move, clear, createConnection, pushCreate]);
 }

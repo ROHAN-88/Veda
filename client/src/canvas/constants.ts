@@ -36,7 +36,13 @@ export const DEFAULT_CARD_H = 160;
 export const SIZE_MIN = 40;
 export const SIZE_MAX = 10_000;
 
-/** Selection-handle sizing (world px; handles scale with zoom in Phase 5a). */
+/**
+ * Selection-handle sizing. As of Phase 6 the handles/ports are counter-scaled by
+ * `--inv-zoom` (see WorldLayer) so these are effectively CONSTANT SCREEN px.
+ * `RESIZE_HANDLE_PX` mirrors the `.whiteboard__resize-handle` CSS size (kept in
+ * sync by hand — CSS can't import TS). `ROTATE_HANDLE_OFFSET_PX` is also the
+ * world-space rotate hit-anchor offset, divided by zoom at gesture start.
+ */
 export const RESIZE_HANDLE_PX = 10;
 export const ROTATE_HANDLE_OFFSET_PX = 28;
 
@@ -56,3 +62,7 @@ export const CONNECT_PORT_PX = 11;
 export const ARROW_HEAD_PX = 13;
 export const CONNECTION_STROKE_PX = 2;
 export const CONNECTION_HIT_STROKE_PX = 14;
+
+/** Arrow-key nudge distance for the selected card, in world px (Shift = large). */
+export const NUDGE_STEP = 1;
+export const NUDGE_STEP_LARGE = 10;

@@ -29,3 +29,11 @@ export const useLiveRectStore = create<LiveRectState>((set) => ({
       return { rects: next };
     }),
 }));
+
+/**
+ * Subscribe to just ONE card's live rect. A component using this re-renders only
+ * when that card's rect changes — so an arrow following card A ignores a drag of
+ * unrelated card B (the whole-`rects` subscription would re-render on every drag).
+ */
+export const useLiveRect = (id: string): CardRect | undefined =>
+  useLiveRectStore((state) => state.rects[id]);

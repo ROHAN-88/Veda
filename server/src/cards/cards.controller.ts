@@ -15,6 +15,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { SessionAuthGuard } from '../common/guards/session-auth.guard';
 import type { SafeUser } from '../common/types/authenticated-request';
 import { CardsService } from './cards.service';
+import { BulkCardIdsDto, BulkUpdateCardsDto } from './dto/bulk-cards.dto';
 import { CreateCardDto } from './dto/create-card.dto';
 import { UpdateCardDto } from './dto/update-card.dto';
 
@@ -35,6 +36,36 @@ export class CardsController {
     @Body() dto: CreateCardDto,
   ) {
     return this.cards.create(user.id, projectId, dto);
+  }
+
+  // Bulk routes use static paths so they never collide with the `:id` routes.
+  @Patch()
+  bulkUpdate(
+    @CurrentUser() user: SafeUser,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Body() dto: BulkUpdateCardsDto,
+  ) {
+    return this.cards.bulkUpdate(user.id, projectId, dto.updates);
+  }
+
+  @Post('bulk-delete')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  bulkDelete(
+    @CurrentUser() user: SafeUser,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Body() dto: BulkCardIdsDto,
+  ): Promise<void> {
+    return this.cards.bulkDelete(user.id, projectId, dto.ids);
+  }
+
+  @Post('bulk-restore')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  bulkRestore(
+    @CurrentUser() user: SafeUser,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Body() dto: BulkCardIdsDto,
+  ): Promise<void> {
+    return this.cards.bulkRestore(user.id, projectId, dto.ids);
   }
 
   @Get()
@@ -59,6 +90,16 @@ export class CardsController {
     @Body() dto: UpdateCardDto,
   ) {
     return this.cards.update(user.id, projectId, id, dto);
+  }
+
+  @Post(':id/bring-to-front')
+  @HttpCode(HttpStatus.OK)
+  bringToFront(
+    @CurrentUser() user: SafeUser,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.cards.bringToFront(user.id, projectId, id);
   }
 
   @Delete(':id')

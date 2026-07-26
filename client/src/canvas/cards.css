@@ -90,6 +90,108 @@
   user-select: text;
 }
 
+/* Rendered Markdown (Phase 7). Everything is sized in `em` so it scales with the
+   card's inline `fontSize`; the card is fixed-size + `overflow: hidden`, so blocks
+   are clipped (not scrolled) — margins stay tight and first/last are reset. */
+.whiteboard__card-markdown {
+  white-space: normal;
+}
+.whiteboard__card-markdown > :first-child {
+  margin-top: 0;
+}
+.whiteboard__card-markdown > :last-child {
+  margin-bottom: 0;
+}
+.whiteboard__card-markdown p,
+.whiteboard__card-markdown ul,
+.whiteboard__card-markdown ol,
+.whiteboard__card-markdown blockquote,
+.whiteboard__card-markdown pre,
+.whiteboard__card-markdown table {
+  margin: 0.35em 0;
+}
+.whiteboard__card-markdown h1,
+.whiteboard__card-markdown h2,
+.whiteboard__card-markdown h3,
+.whiteboard__card-markdown h4,
+.whiteboard__card-markdown h5,
+.whiteboard__card-markdown h6 {
+  margin: 0.4em 0 0.25em;
+  line-height: 1.2;
+  font-weight: 700;
+}
+.whiteboard__card-markdown h1 {
+  font-size: 1.5em;
+}
+.whiteboard__card-markdown h2 {
+  font-size: 1.3em;
+}
+.whiteboard__card-markdown h3 {
+  font-size: 1.15em;
+}
+.whiteboard__card-markdown h4,
+.whiteboard__card-markdown h5,
+.whiteboard__card-markdown h6 {
+  font-size: 1em;
+}
+.whiteboard__card-markdown ul,
+.whiteboard__card-markdown ol {
+  padding-left: 1.3em;
+}
+.whiteboard__card-markdown li {
+  margin: 0.1em 0;
+}
+.whiteboard__card-markdown a {
+  color: inherit;
+  text-decoration: underline;
+}
+.whiteboard__card-markdown code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+  padding: 0.05em 0.3em;
+  border-radius: 4px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+.whiteboard__card-markdown pre {
+  padding: 0.4em 0.6em;
+  border-radius: 6px;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  overflow: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.whiteboard__card-markdown pre code {
+  padding: 0;
+  background: none;
+}
+.whiteboard__card-markdown blockquote {
+  margin-left: 0;
+  padding-left: 0.7em;
+  border-left: 3px solid color-mix(in srgb, currentColor 35%, transparent);
+  opacity: 0.85;
+}
+.whiteboard__card-markdown hr {
+  border: none;
+  border-top: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  margin: 0.5em 0;
+}
+.whiteboard__card-markdown table {
+  border-collapse: collapse;
+  font-size: 0.9em;
+}
+.whiteboard__card-markdown th,
+.whiteboard__card-markdown td {
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  padding: 0.15em 0.4em;
+}
+.whiteboard__card-markdown input[type='checkbox'] {
+  margin-right: 0.35em;
+}
+/* In centered shapes the content div is a flex container — stack the blocks. */
+.shape-centered .whiteboard__card-markdown {
+  flex-direction: column;
+}
+
 .whiteboard__card-delete {
   position: absolute;
   top: 2px;
@@ -107,11 +209,14 @@
   opacity: 1;
 }
 
-/* Selection outline + resize/rotate handles */
+/* Selection outline + resize/rotate handles.
+   `--inv-zoom` (= 1/zoom, published on the world layer) counter-scales this chrome
+   so it stays a constant SCREEN size/distance instead of growing with the zoom. */
 .whiteboard__card-selection {
   position: absolute;
-  inset: -2px;
-  border: 1px solid var(--accent);
+  inset: calc(-2px * var(--inv-zoom, 1));
+  border: solid var(--accent);
+  border-width: calc(1px * var(--inv-zoom, 1));
   pointer-events: none;
 }
 
@@ -124,6 +229,7 @@
   background: #fff;
   border: 1px solid var(--accent);
   border-radius: 2px;
+  transform: scale(var(--inv-zoom, 1));
 }
 .handle-nw {
   top: 0;
@@ -169,7 +275,7 @@
 .whiteboard__rotate-handle {
   position: absolute;
   z-index: 2;
-  top: -28px;
+  top: calc(-28px * var(--inv-zoom, 1)); /* constant screen distance above the card */
   left: 50%;
   width: 12px;
   height: 12px;
@@ -178,6 +284,7 @@
   border: 1px solid var(--accent);
   border-radius: 50%;
   cursor: grab;
+  transform: scale(var(--inv-zoom, 1)); /* scales the circle + its ::before stem */
 }
 .whiteboard__rotate-handle::before {
   content: '';
@@ -207,6 +314,12 @@
   border-radius: 10px;
   background: color-mix(in srgb, Canvas 82%, transparent);
   backdrop-filter: blur(6px);
+}
+
+.whiteboard__selection-count {
+  font-size: 0.8rem;
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
 }
 
 .whiteboard__swatches {

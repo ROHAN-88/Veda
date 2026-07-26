@@ -65,15 +65,20 @@ model Card {
   rotation  Float    @default(0)
   fontSize  Int      @default(14)
   zIndex    Int      @default(0)
+  // Soft delete (Phase 8): a deleted card sets `deletedAt` rather than removing
+  // the row, so undo/restore brings it back with the SAME id, zIndex, and arrows.
+  // All reads filter `deletedAt: null`. Its arrows are hidden while it's deleted
+  // (see the connection list filter) and reappear on restore.
+  deletedAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Relation arrows anchored to this card (Phase 5b). Cascade on delete so a
-  // removed card takes its arrows with it — no orphan connections.
+  // Relation arrows anchored to this card (Phase 5b). The FK still cascades on a
+  // real row delete (e.g. project removal); ordinary card deletes are soft.
   outgoing Connection[] @relation("ConnectionSource")
   incoming Connection[] @relation("ConnectionTarget")
 
-  @@index([projectId])
+  @@index([projectId, deletedAt])
   @@map("cards")
 }
 
@@ -89,6 +94,10 @@ model Connection {
   targetCardId String
   targetCard   Card    @relation("ConnectionTarget", fields: [targetCardId], references: [id], onDelete: Cascade)
   color        String  @default("#64748b")
+  // Soft delete (Phase 8): a deleted arrow sets `deletedAt`; `create` for the same
+  // ordered pair restores it (keeps the id, respects the unique index). Reads
+  // filter `deletedAt: null`.
+  deletedAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

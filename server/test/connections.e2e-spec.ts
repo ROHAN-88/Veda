@@ -213,6 +213,65 @@ describe('Connections (e2e)', () => {
     expect((await agent.get(connections).expect(200)).body).toHaveLength(0);
   });
 
+  it('soft-deletes an arrow; re-creating the pair restores the same row', async () => {
+    const agent = await authedAgent();
+    const projectId = await createProject(agent);
+    const a = await createCard(agent, projectId, 0, 0);
+    const b = await createCard(agent, projectId, 400, 0);
+    const connections = `/api/projects/${projectId}/connections`;
+
+    let token = await csrf(agent);
+    const created = await agent
+      .post(connections)
+      .set('X-CSRF-Token', token)
+      .send({ sourceCardId: a, targetCardId: b })
+      .expect(201);
+    const id = created.body.id as string;
+
+    token = await csrf(agent);
+    await agent.delete(`${connections}/${id}`).set('X-CSRF-Token', token).expect(204);
+    expect((await agent.get(connections).expect(200)).body).toHaveLength(0);
+
+    // Re-creating the same ordered pair restores the soft-deleted row (same id).
+    token = await csrf(agent);
+    const recreated = await agent
+      .post(connections)
+      .set('X-CSRF-Token', token)
+      .send({ sourceCardId: a, targetCardId: b, color: '#123456' })
+      .expect(201);
+    expect(recreated.body.id).toBe(id);
+    expect(recreated.body.color).toBe('#123456');
+    expect((await agent.get(connections).expect(200)).body).toHaveLength(1);
+  });
+
+  it('restoring a soft-deleted card brings its arrows back', async () => {
+    const agent = await authedAgent();
+    const projectId = await createProject(agent);
+    const a = await createCard(agent, projectId, 0, 0);
+    const b = await createCard(agent, projectId, 400, 0);
+    const cards = `/api/projects/${projectId}/cards`;
+    const connections = `/api/projects/${projectId}/connections`;
+
+    let token = await csrf(agent);
+    await agent
+      .post(connections)
+      .set('X-CSRF-Token', token)
+      .send({ sourceCardId: a, targetCardId: b })
+      .expect(201);
+
+    token = await csrf(agent);
+    await agent.delete(`${cards}/${a}`).set('X-CSRF-Token', token).expect(204); // soft-delete card
+    expect((await agent.get(connections).expect(200)).body).toHaveLength(0); // arrow hidden
+
+    token = await csrf(agent);
+    await agent
+      .post(`${cards}/bulk-restore`)
+      .set('X-CSRF-Token', token)
+      .send({ ids: [a] })
+      .expect(204);
+    expect((await agent.get(connections).expect(200)).body).toHaveLength(1); // arrow back
+  });
+
   it('validates connection input (400)', async () => {
     const agent = await authedAgent();
     const projectId = await createProject(agent);

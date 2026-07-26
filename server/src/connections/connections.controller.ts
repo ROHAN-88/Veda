@@ -15,6 +15,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { SessionAuthGuard } from '../common/guards/session-auth.guard';
 import type { SafeUser } from '../common/types/authenticated-request';
 import { ConnectionsService } from './connections.service';
+import { BulkConnectionIdsDto } from './dto/bulk-connections.dto';
 import { CreateConnectionDto } from './dto/create-connection.dto';
 import { UpdateConnectionDto } from './dto/update-connection.dto';
 
@@ -35,6 +36,27 @@ export class ConnectionsController {
     @Body() dto: CreateConnectionDto,
   ) {
     return this.connections.create(user.id, projectId, dto);
+  }
+
+  // Static paths — never collide with the `:id` routes.
+  @Post('bulk-delete')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  bulkDelete(
+    @CurrentUser() user: SafeUser,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Body() dto: BulkConnectionIdsDto,
+  ): Promise<void> {
+    return this.connections.bulkDelete(user.id, projectId, dto.ids);
+  }
+
+  @Post('bulk-restore')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  bulkRestore(
+    @CurrentUser() user: SafeUser,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Body() dto: BulkConnectionIdsDto,
+  ): Promise<void> {
+    return this.connections.bulkRestore(user.id, projectId, dto.ids);
   }
 
   @Get()

@@ -95,8 +95,11 @@ export function useCardResize(
     detach();
     const card0 = toRect(card);
     const center = cardCenter(card0);
+    // The handle now renders a CONSTANT screen distance away (offset / zoom in
+    // world px), so seed the drag anchor with the same zoom-scaled offset.
+    const zoom = useViewportStore.getState().camera.zoom;
     track(
-      rotateHandleWorldPos(card0, ROTATE_HANDLE_OFFSET_PX),
+      rotateHandleWorldPos(card0, ROTATE_HANDLE_OFFSET_PX / zoom),
       { x: event.clientX, y: event.clientY },
       (world, e) =>
         setPreview({ ...card0, rotation: rotateCard(center, world, { snap: e.shiftKey }) }),

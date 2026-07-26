@@ -486,9 +486,9 @@ sanitization — the z-order representation is decided there).
 
 ### Residual risks / follow-ups
 
-- **Bring-to-front `zIndex` is client-computed** (max+1) — correct for single-user MVP; a
-  future server-side `bring-to-front` endpoint (server recomputes max+1) removes a
-  concurrent-tab race.
+- ~~**Bring-to-front `zIndex` is client-computed** (max+1) — a future server-side endpoint
+  removes a concurrent-tab race.~~ **Resolved in Phase 6** (server-allocated `bring-to-front`;
+  client `zIndex` no longer accepted).
 - No card **resize** yet (fixed default size, draggable + editable); resize handles are a
   later polish.
 - Markdown/rich content deferred (plain text for now); would add a sanitizer when it lands.
@@ -577,14 +577,14 @@ follow-ups above).
 
 ### Residual risks / follow-ups
 
-- Resize/rotate handles **scale with zoom** (they live inside the world transform). Documented clean
-  follow-up: a `--inv-zoom` CSS var to pin them to constant screen size. CSS resize cursors don't
-  track arbitrary rotation (acceptable).
+- ~~Resize/rotate handles **scale with zoom**; follow-up: a `--inv-zoom` CSS var to pin them to
+  constant screen size.~~ **Resolved in Phase 6** (`--inv-zoom` counter-scales handles + ports). CSS
+  resize cursors don't track arbitrary rotation (acceptable).
 - Culling uses each card's axis-aligned `x,y,w,h` (rotation ignored); the padded viewport
   over-includes, so a rotated corner is never dropped early.
 - `client/src/index.css` is at ~486 lines (approaching the 500 cap) — split into per-area sheets in
   Phase 5b.
-- Bring-to-front `zIndex` race, no markdown, prior waivers — unchanged from Phase 4.
+- Bring-to-front `zIndex` race (**resolved in Phase 6**), no markdown, prior waivers — from Phase 4.
 
 ### Follow-up — per-card text size (2026-07-26)
 
@@ -699,6 +699,256 @@ markdown/rich content — or another feature the user prioritises).
 
 ---
 
+## Phase 6 — Hardening & Polish — 2026-07-26
+
+### What was done
+
+- **Bring-to-front is now server-authoritative** — no more cross-tab race where two clients both
+  wrote `max+1` and tied. Stacking order (`zIndex`) can no longer be set by the client at all.
+- **Selection handles + connect ports stay a constant on-screen size and distance at every zoom**
+  (they used to grow with the world `scale(zoom)`).
+- **Keyboard shortcuts:** Escape (clear / cancel arrow-drag), Delete/Backspace (remove the selected
+  card or arrow), and Arrow keys to nudge the selected card (Shift = ×10) — all inert while typing in
+  a card.
+- **A light performance pass** that stops needless re-renders during drags, plus a DEV-only FPS meter.
+
+### How it was done
+
+- **`zIndex` race → server endpoint.** New `POST /projects/:projectId/cards/:id/bring-to-front`
+  (`cards.controller`/`cards.service`) allocates `max+1` inside a `prisma.$transaction`, recomputed
+  from committed DB state (reuses the `create` pattern); `getOwned` still 404-guards it. **`zIndex`
+  removed from `UpdateCardDto`**, so a PATCH carrying it now 400s (`forbidNonWhitelisted`). Client
+  side: `useBringToFront` (optimistic `nextZIndex` for instant feel, reconciled on settle);
+  `CardsLayer.onBringToFront` reads the cache via `queryClient` (not a `cards` closure) — which also
+  **stabilises its identity**, so memoized `CardView`s stop re-rendering on unrelated mutations.
+- **Constant-screen chrome.** `WorldLayer` publishes `--inv-zoom` (= 1 / zoom) as a CSS custom
+  property; `cards.css`/`connections.css` counter-scale the resize/rotate handles, selection outline,
+  and connect ports with `scale(var(--inv-zoom))` + `calc(… * var(--inv-zoom))` offsets. The
+  rotate-gesture world anchor is divided by zoom to match (`useCardResize.beginRotate`).
+- **Keyboard.** Extracted `hooks/useCanvasKeyboard` (mounted once in `WhiteboardCanvas`): reads
+  selection/stores via `.getState()`, guards on `document.activeElement` being a text field. Nudge is
+  optimistic-immediately + debounced-commit (ADR D10) via a pure, unit-tested `nudgeDelta`.
+- **Perf.** Each arrow is now a memoized `ConnectionArrow` subscribing to only its two endpoints'
+  live rects (`useLiveRect`), so dragging an **unconnected** card re-renders no arrows (the layer no
+  longer subscribes to the whole live-rect map). `CardsLayer.visible` is memoized. DEV FPS meter
+  (`useFrameStats` + `DebugFps`) rides the existing DEV-gated debug slot (tree-shaken from prod).
+
+### What changed
+
+- **No new dependencies.** No schema/migration change (bring-to-front reuses `zIndex`).
+- **New files:** `client/src/canvas/{ConnectionArrow.tsx,nudge.ts,nudge.test.ts,DebugFps.tsx}`,
+  `client/src/hooks/{useCanvasKeyboard,useFrameStats}.ts`.
+- **Edited (server):** `cards.controller` (+route), `cards.service` (+`bringToFront`),
+  `dto/update-card.dto` (−`zIndex`), `cards.service.spec` + `cards.e2e-spec` (+tests).
+- **Edited (client):** `api/cards` (+`bringToFront`, −`zIndex`), `hooks/useCards`
+  (+`useBringToFront`, export `cardsKey`), `CardsLayer`, `WorldLayer`, `ConnectionsLayer`,
+  `useCardResize`, `constants`, `cards.css`, `connections.css`, `store/liveRectStore` (+`useLiveRect`),
+  `WhiteboardCanvas`.
+- **Breaking:** clients may no longer send `zIndex` in a card PATCH (now 400) — internal only; the app
+  uses the new endpoint.
+
+### Security notes (Phase 6 scope)
+
+- **CWE-472 (parameter tampering):** stacking order is server-owned; a client `zIndex` is rejected.
+- **A01 / CWE-639 IDOR:** the new route reuses the relation-filtered `getOwned` (404); no new trust
+  surface. Keyboard deletes/nudges reuse existing owner-scoped, validated endpoints; the editing guard
+  prevents key hijacking of text input.
+- **No new dependencies** → `audit-ci` stays green.
+
+### Verification (Phase 6)
+
+| Check                     | Result                                                            |
+| ------------------------- | ----------------------------------------------------------------- |
+| format / lint / typecheck | ✅ all pass (server + client)                                     |
+| build (server + client)   | ✅ (DEV FPS meter + debug tooling tree-shaken from prod)          |
+| Unit tests                | ✅ **server 35** (+2 bringToFront) · **client 58** (+3 nudge)     |
+| e2e tests (vs Postgres)   | ✅ **26** (+1: bring-to-front raises; PATCH `zIndex` → 400; IDOR) |
+| `audit-ci` gate           | ✅ no un-allowlisted high/critical — **no new dependencies**      |
+| 500-line/file cap         | ✅ all source files well under (largest touched 288)              |
+
+### Residual risks / follow-ups
+
+- Bring-to-front recomputes `max+1` from committed state, which fixes the reported stale-cache race;
+  two _truly simultaneous_ requests could still tie (narrow window). A per-project sequence or advisory
+  lock is the future fix if concurrent editing lands.
+- The live-rect mirror still keeps two sources of truth during a gesture (local `preview` +
+  `liveRectStore`) by design; unifying them remains a clean follow-up.
+- `SpatialGrid` still fully rebuilds on any `cards` change (O(n), only on commits) — acceptable;
+  incremental update is a later option.
+- Markdown/rich text (**resolved in Phase 7**); still no multi-select (Ctrl+A intentionally deferred
+  to that phase).
+
+### Phase gate
+
+Phase 6 is complete. **Awaiting explicit approval to begin the next phase.** Roadmap: **Phase 7** —
+Rich text / markdown in cards (sanitized); **Phase 8** — Multi-select + grouping + undo/redo;
+**Phase 9** — Sharing / export.
+
+---
+
+## Phase 7 — Rich Text (Markdown) in Cards — 2026-07-26
+
+### What was done
+
+- **Card content is now Markdown.** Editing still shows the raw source in the double-click textarea; the
+  card **renders** it — headings, bold/italic, lists, links, code, blockquotes, and GFM
+  tables/strikethrough/task-lists — when not editing.
+- Rendering is **XSS-safe by construction**: it never builds an HTML string and never uses
+  `dangerouslySetInnerHTML`.
+
+### How it was done
+
+- New **`CardMarkdown`** component wraps `react-markdown` + `remark-gfm`. It renders Markdown to React
+  elements, so: raw HTML in the source is **ignored** (no `rehype-raw` — it's shown as inert escaped
+  text), dangerous URL schemes (`javascript:`…) are stripped by react-markdown's default `urlTransform`,
+  links open in a new tab with `rel="noopener noreferrer nofollow"`, and **images are dropped** (v1 — no
+  external resource loads). `CardView` renders it only in the display branch (the single content→UI path);
+  the raw-source textarea + placeholder are unchanged.
+- **Lazy-loaded** via `React.lazy` + `Suspense` (fallback = the raw text) so the ~46 kB-gzip
+  remark/micromark tree ships as a **separate chunk** loaded on demand — the whiteboard shell chunk stays
+  ~355 kB (unchanged from Phase 6). Styling is a `.whiteboard__card-markdown` block in `cards.css`, sized
+  in **`em`** so it scales with the card's `fontSize` and fits the fixed-size, `overflow:hidden` card.
+- **No server change, no migration** — `content` is still a stored/validated text field; the server emits
+  JSON only (CSP `default-src 'none'`), so sanitization is 100% the client renderer's job.
+
+### What changed
+
+- **New dependencies** (exact-pinned, client): `react-markdown` **10.1.0**, `remark-gfm` **4.0.1** — both
+  **MIT**, the widely-used/well-audited unified·remark·rehype·micromark stack, **clean advisory record**
+  (added **0** new `audit-ci` HIGH/CRITICAL; the two allowlisted advisories are pre-existing).
+- **New files:** `client/src/canvas/{CardMarkdown.tsx, CardMarkdown.test.tsx}`; markdown styles in
+  `cards.css`; `vitest.config.ts` include broadened to `*.test.{ts,tsx}`.
+- **Edited:** `CardView.tsx` (lazy `CardMarkdown` in the display branch + header comment).
+- **Bundle:** main chunk **355 kB / 111 kB gzip** (unchanged) + a lazy `CardMarkdown` chunk
+  **154 kB / 46 kB gzip**.
+- **Backward-compat:** existing plain-text cards now render as Markdown (plain text → a paragraph;
+  stray `#`/`*`/`>` may format) — acceptable for the MVP. **Breaking:** none.
+
+### Security notes (Phase 7 scope)
+
+- **A03 / CWE-79 (XSS):** the single render path goes through react-markdown — no `innerHTML`, raw HTML
+  ignored (escaped to text), URL schemes sanitized, images off. Covered by node-env tests
+  (`renderToStaticMarkup`): `<script>`, `javascript:` links, raw `<img onerror>`, and Markdown images are
+  all proven inert/dropped; safe links get `target="_blank"` + `noopener`.
+- **Defense in depth:** server still stores content as trimmed text (`@IsString`, `@MaxLength(10_000)`)
+  and never renders HTML. No new server surface; IDOR unchanged.
+
+### Verification (Phase 7)
+
+| Check                     | Result                                                           |
+| ------------------------- | ---------------------------------------------------------------- |
+| format / lint / typecheck | ✅ all pass (server + client)                                    |
+| build (server + client)   | ✅ Markdown code-split to a lazy chunk (main chunk unchanged)    |
+| Unit tests                | ✅ **client 65** (+7 CardMarkdown security + render) · server 35 |
+| e2e tests (vs Postgres)   | ✅ **26** (server unchanged — re-run green)                      |
+| `audit-ci` gate           | ✅ **no new HIGH/CRITICAL** from the two new deps                |
+| 500-line/file cap         | ✅ all source files well under (`cards.css` 379)                 |
+
+### Residual risks / follow-ups
+
+- **Images are disabled** in v1 (privacy/tracking) — re-enable later with a URL allowlist (+ optional CSP
+  `img-src`).
+- Content overflowing the fixed card is **clipped** (no scroll), by design — a future "expand/scroll on
+  select" affordance is possible.
+- Plain-text→Markdown reinterpretation of pre-Phase-7 content (above) is accepted; a `contentFormat` flag
+  is the escape hatch if it ever matters.
+
+### Follow-up — card creation is button-only (2026-07-26)
+
+- **Removed double-click-to-add.** A card is now created **only** via the HUD **"+ Card"** button (at the
+  viewport centre); double-clicking empty canvas no longer creates one — this prevents accidental cards
+  during interaction and makes creation an explicit action. Double-clicking a _card_ still opens Markdown
+  editing (that handler lives on the card and stops propagation). Change was `WhiteboardCanvas.tsx` only
+  (deleted the `onDoubleClick` handler + prop + now-unused `screenToWorld`/`ReactMouseEvent` imports);
+  no new deps, no test change (client 65 unchanged, build/lint/typecheck green).
+
+### Phase gate
+
+Phase 7 is complete. **Awaiting explicit approval to begin the next phase.** Roadmap: **Phase 8** —
+Multi-select + grouping + undo/redo; **Phase 9** — Sharing / export.
+
+---
+
+## Phase 8 — Multi-select, Grouping & Undo/Redo — 2026-07-27
+
+### What was done
+
+- **Multi-select:** left-drag on empty canvas draws a **rubber-band marquee** (live-selects intersecting
+  cards; Shift = additive); **Shift-click** toggles a card; **Ctrl/⌘-A** selects all. Panning moved to
+  **middle-drag** and **Space + left-drag** (wheel/two-finger unchanged).
+- **Group operations:** dragging any selected card moves the **whole selection** (arrows follow live); the
+  toolbar recolours / reshapes / resizes-text / **deletes** the whole selection at once (with an
+  all-share-or-mixed highlight + an "N selected" count); Delete and arrow-nudge act on the group.
+- **Full undo/redo** (Ctrl/⌘-Z, Ctrl/⌘-Y or ⌘-⇧-Z) — including **undo of a delete**, which brings the card
+  back with its **same id, stacking (`zIndex`), and arrows**.
+
+### How it was done
+
+- **Backend soft-delete (the enabler for undo-delete):** `Card`/`Connection` gained `deletedAt`
+  (migration `add_soft_delete`); `remove` now sets it and all reads filter it out; arrows to a
+  soft-deleted card auto-hide (connection list filter) and reappear on restore; connection `create`
+  **restores** a soft-deleted `(source,target)` pair instead of colliding (keeps the id, respects the
+  unique index). New **transactional batch routes** — `PATCH /cards` (bulk update), `POST
+/cards/bulk-delete` + `/bulk-restore` (and connection bulk delete/restore) — each verifies **every** id
+  is owner-scoped (404) before mutating; new nested-array DTOs (`@ValidateNested`/`@ArrayMaxSize`).
+- **Client:** `selectionStore` became a `Set<string>` of card ids (+ `toggle`/`selectMany`/`addMany`);
+  `useMarquee` (native container listeners, mutually excluded from pan by button/Space) hit-tests a pure,
+  unit-tested `cardsInRect`; group-drag broadcasts one world delta to every selected card through
+  `liveRectStore` (each `CardView` reads `useLiveRect`) and commits one bulk update. **Undo/redo** is a
+  session-scoped `historyStore` of inverse-op closures: `useCardHistory`/`useConnectionHistory` capture
+  before/after (or the id, for create/delete) at each action site and push `{undo, redo}` that call the
+  bulk mutation hooks directly. New optimistic bulk hooks mirror the existing ADR-D10 pattern.
+- **Excluded from undo** (documented): bring-to-front (fires on every card press) and content edits (the
+  textarea has its own undo).
+
+### What changed
+
+- **No new dependencies.** Migration `add_soft_delete` (`deletedAt` on both tables).
+- **New files:** server `cards/dto/bulk-cards.dto.ts`, `connections/dto/bulk-connections.dto.ts`; client
+  `store/{marqueeStore,panModeStore,historyStore}.ts`, `hooks/{useMarquee,useCardHistory,
+useConnectionHistory}.ts`, `canvas/{MarqueeOverlay.tsx,cardsInRect(+test),cardHistory}.ts`.
+- **Edited:** cards/connections service+controller (soft-delete + bulk); client `selectionStore`,
+  `useCardDrag` (group-drag), `CardView`, `CardsLayer`, `SelectionToolbar`, `ConnectionToolbar`,
+  `useConnectionDraft`, `usePanZoom` (pan gate), `useCanvasKeyboard`, `WhiteboardCanvas`, api + `useCards`/
+  `useConnections` (bulk methods/hooks), CSS (marquee + count).
+- **Breaking:** `DELETE /cards|connections/:id` is now a soft delete (same 204). Internal only.
+
+### Security notes (Phase 8 scope)
+
+- **A01/CWE-639 IDOR:** every batch/restore route is session-guarded and verifies **each** id is the
+  caller's within the project (relation-filtered → 404) inside a `$transaction`; restore is owner-scoped.
+- **CWE-20/400:** nested-array DTOs bounded (`@ArrayMaxSize(500)`) + `@IsUUID`/`@ValidateNested`;
+  `forbidNonWhitelisted` still strips unknowns. Soft-deleted rows are invisible to all reads.
+- **No new deps** → `audit-ci` green.
+
+### Verification (Phase 8)
+
+| Check                     | Result                                                                         |
+| ------------------------- | ------------------------------------------------------------------------------ |
+| format / lint / typecheck | ✅ all pass (server + client)                                                  |
+| build (server + client)   | ✅                                                                             |
+| Unit tests                | ✅ **server 44** (+9 soft-delete/bulk) · **client 69** (+4 marquee)            |
+| e2e tests (vs Postgres)   | ✅ **30** (+4: soft-delete/restore round-trip, bulk, connection restore, IDOR) |
+| `audit-ci` gate           | ✅ no un-allowlisted high/critical — **no new dependencies**                   |
+| 500-line/file cap         | ✅ all source files well under (largest touched 392)                           |
+
+### Residual risks / follow-ups
+
+- **Soft-deleted rows accumulate** (no GC) — acceptable for the MVP; a purge job for rows deleted > N days
+  is a clean follow-up.
+- Undo/redo is **session-scoped** (not persisted across reloads) and excludes bring-to-front + content
+  edits (by design).
+- Marquee uses **intersect** (touch-to-select) over card AABBs (rotation ignored, matching culling).
+- Group **resize/rotate** act on the single grabbed card (only **move** is grouped) — a future
+  bounding-box group transform is possible.
+
+### Phase gate
+
+Phase 8 is complete. **Awaiting explicit approval to begin the next phase** (**Phase 9** — Sharing /
+export).
+
+---
+
 ## Research findings — AFFiNE / BlockSuite
 
 Legend: **[V]** verified from the cited repo/docs · **[I]** reasoned inference.
@@ -725,8 +975,9 @@ Legend: **[V]** verified from the cited repo/docs · **[I]** reasoned inference.
 - **[V]** Elements carry an **`xywh`** string bound (`[x,y,w,h]`, world space). → _Card
   stores `x,y,w,h` floats._
 - **[V] Z-order via fractional indexing** (`fractional-indexing` pkg; "the technique Figma
-  uses") — O(1) local reorder, merge-friendly (`gfx/layer.ts`). → _Card stacking uses a
-  fractional string index._
+  uses") — O(1) local reorder, merge-friendly (`gfx/layer.ts`). → _Our card stacking uses an
+  **integer `zIndex`**, server-allocated (max+1) via a `bring-to-front` endpoint (Phase 6) — not
+  a fractional string index; fractional indexing is the future path if concurrent reordering lands._
 - **[V] Spatial index = a UNIFORM GRID, not an R-tree.** `gfx/grid.ts` `GridManager`:
   fixed `3000`-unit cells keyed `"row|col"` in a `Map` of `Set`s; elements register into
   every overlapping cell; `search(bound)` scans only covering cells. **The common

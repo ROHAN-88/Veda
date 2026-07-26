@@ -22,6 +22,9 @@ export const ROTATION_MAX = 360;
 export const FONT_SIZE_MIN = 8;
 export const FONT_SIZE_MAX = 96;
 
+/** Max items in a bulk update/delete/restore request (bounds request size, CWE-400). */
+export const BULK_MAX = 500;
+
 /**
  * `@IsNumber` options rejecting NaN/Infinity. JSON can't carry either, but being
  * explicit documents the intent and guards non-JSON callers (CWE-20 / CWE-400).

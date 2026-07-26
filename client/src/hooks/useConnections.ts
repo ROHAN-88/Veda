@@ -79,3 +79,38 @@ export function useDeleteConnection(projectId: string) {
     onSettled: () => void queryClient.invalidateQueries({ queryKey: connectionsKey(projectId) }),
   });
 }
+
+/** Soft-delete many arrows (undo of create). Optimistic. */
+export function useBulkDeleteConnections(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation<void, Error, string[], { previous?: Connection[] }>({
+    mutationFn: (ids) => connectionsApi.bulkDelete(projectId, ids),
+    onMutate: async (ids) => {
+      await queryClient.cancelQueries({ queryKey: connectionsKey(projectId) });
+      const previous = queryClient.getQueryData<Connection[]>(connectionsKey(projectId));
+      const idSet = new Set(ids);
+      if (previous) {
+        queryClient.setQueryData<Connection[]>(
+          connectionsKey(projectId),
+          previous.filter((conn) => !idSet.has(conn.id)),
+        );
+      }
+      return { previous };
+    },
+    onError: (_err, _ids, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(connectionsKey(projectId), context.previous);
+      }
+    },
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: connectionsKey(projectId) }),
+  });
+}
+
+/** Restore many soft-deleted arrows (undo of delete). Refetch (rows not in cache). */
+export function useBulkRestoreConnections(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation<void, Error, string[]>({
+    mutationFn: (ids) => connectionsApi.bulkRestore(projectId, ids),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: connectionsKey(projectId) }),
+  });
+}

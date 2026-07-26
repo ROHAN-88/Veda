@@ -23,13 +23,14 @@ import {
   SHAPES,
   SIZE_MAX,
   SIZE_MIN,
-  ZINDEX_MAX,
 } from './card-bounds';
 
 /**
  * Partial card update (mirror DTO, matching the Projects convention — not
- * PartialType). Covers drag-move (`x`/`y`), resize (`w`/`h`), content edits, and
- * client-driven bring-to-front (`zIndex`).
+ * PartialType). Covers drag-move (`x`/`y`), resize (`w`/`h`), content, style, and
+ * text size. `zIndex` is deliberately NOT accepted — stacking order is
+ * server-owned via `POST :id/bring-to-front` (Phase 6), so it can't be tampered
+ * with (`forbidNonWhitelisted` 400s any client `zIndex`).
  */
 export class UpdateCardDto {
   @IsOptional()
@@ -61,12 +62,6 @@ export class UpdateCardDto {
   @IsString()
   @MaxLength(CONTENT_MAX)
   content?: string;
-
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  @Max(ZINDEX_MAX)
-  zIndex?: number;
 
   @IsOptional()
   @IsIn(SHAPES)

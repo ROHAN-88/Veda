@@ -8,6 +8,9 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    // `.tsx` is included for render-based security tests that use
+    // `react-dom/server`'s `renderToStaticMarkup` — it needs no DOM, so the
+    // lightweight `node` environment still applies.
+    include: ['src/**/*.test.{ts,tsx}'],
   },
 });
