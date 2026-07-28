@@ -39,6 +39,8 @@ export interface Connection {
   sourceCardId: string;
   targetCardId: string;
   color: string;
+  /** Optional plain-text label rendered at the arrow's midpoint. */
+  label: string;
   createdAt: string;
   updatedAt: string;
 }

@@ -21,6 +21,7 @@ export interface TransferConnection {
   sourceRef: string;
   targetRef: string;
   color: string;
+  label: string;
 }
 
 export interface TransferDocument {

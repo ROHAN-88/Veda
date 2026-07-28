@@ -59,7 +59,7 @@ describe('ProjectTransferService', () => {
       const mock = createPrismaMock();
       mock.card.findMany.mockResolvedValue([card('a'), card('b', { content: 'B' })]);
       mock.connection.findMany.mockResolvedValue([
-        { sourceCardId: 'a', targetCardId: 'b', color: '#64748b' },
+        { sourceCardId: 'a', targetCardId: 'b', color: '#64748b', label: 'links' },
       ]);
 
       const doc = await makeService(mock).exportProject('user-1', 'p1');
@@ -68,7 +68,9 @@ describe('ProjectTransferService', () => {
       expect(doc.project).toEqual({ name: 'Board' });
       expect(doc.cards.map((c) => c.ref)).toEqual(['a', 'b']);
       expect(doc.cards[0]).not.toHaveProperty('id');
-      expect(doc.connections).toEqual([{ sourceRef: 'a', targetRef: 'b', color: '#64748b' }]);
+      expect(doc.connections).toEqual([
+        { sourceRef: 'a', targetRef: 'b', color: '#64748b', label: 'links' },
+      ]);
     });
 
     it('reads only live rows (deletedAt: null) in stacking order', async () => {

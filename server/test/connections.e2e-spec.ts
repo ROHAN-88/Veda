@@ -107,6 +107,41 @@ describe('Connections (e2e)', () => {
     await agent.get(`${connections}/${id}`).expect(404);
   });
 
+  it('sets and validates the midpoint label', async () => {
+    const agent = await authedAgent();
+    const projectId = await createProject(agent);
+    const a = await createCard(agent, projectId, 0, 0);
+    const b = await createCard(agent, projectId, 400, 0);
+    const connections = `/api/projects/${projectId}/connections`;
+
+    let token = await csrf(agent);
+    const created = await agent
+      .post(connections)
+      .set('X-CSRF-Token', token)
+      .send({ sourceCardId: a, targetCardId: b })
+      .expect(201);
+    expect(created.body.label).toBe(''); // schema default
+    const id = created.body.id as string;
+
+    token = await csrf(agent);
+    const patched = await agent
+      .patch(`${connections}/${id}`)
+      .set('X-CSRF-Token', token)
+      .send({ label: '  depends on  ' })
+      .expect(200);
+    expect(patched.body.label).toBe('depends on'); // trimmed
+
+    const list = await agent.get(connections).expect(200);
+    expect(list.body[0].label).toBe('depends on');
+
+    token = await csrf(agent);
+    await agent
+      .patch(`${connections}/${id}`)
+      .set('X-CSRF-Token', token)
+      .send({ label: 'x'.repeat(201) })
+      .expect(400); // over LABEL_MAX
+  });
+
   it('prevents cross-user IDOR: user B cannot touch user A connections (404)', async () => {
     const alice = await authedAgent();
     const bob = await authedAgent();

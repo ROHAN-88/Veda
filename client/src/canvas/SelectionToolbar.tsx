@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { CARD_SHAPES, clampFontSize, PALETTE, SHAPE_ICON, toCardShape } from './cardShapes';
-import { FONT_SIZE_STEP } from './constants';
+import { FONT_SIZE_MAX, FONT_SIZE_MIN, FONT_SIZE_STEP } from './constants';
 import type { UpdateCardInput } from '../api/cards';
 import { useCards } from '../hooks/useCards';
 import { useCardHistory } from '../hooks/useCardHistory';
@@ -32,13 +33,36 @@ export function SelectionToolbar({ projectId }: { projectId: string }) {
     }
   }, 120);
 
+  // Shared text size across the selection (null = mixed), shown in the number input.
+  // A local draft keeps the field responsive; it resets whenever the shared value
+  // changes (a commit, or a new selection) via the render-time reset pattern — no
+  // effect needed, so typing is never clobbered mid-edit.
+  const commonFontSize = allSame(selected.map((c) => c.fontSize));
+  const fontText = commonFontSize != null ? String(commonFontSize) : '';
+  const [fontDraft, setFontDraft] = useState(fontText);
+  const [fontBase, setFontBase] = useState(fontText);
+  if (fontText !== fontBase) {
+    setFontBase(fontText);
+    setFontDraft(fontText);
+  }
+
+  const commitFontSize = (): void => {
+    const parsed = Number(fontDraft);
+    if (fontDraft.trim() === '' || Number.isNaN(parsed)) {
+      setFontDraft(fontText); // revert bad/empty input
+      return;
+    }
+    const size = clampFontSize(parsed);
+    commitUpdate(selected.map((c) => ({ id: c.id, fontSize: size })));
+    setFontDraft(String(size));
+  };
+
   if (selected.length === 0) {
     return null;
   }
 
   const commonColor = allSame(selected.map((c) => c.color.toLowerCase()));
   const commonShape = allSame(selected.map((c) => toCardShape(c.shape)));
-  const commonFontSize = allSame(selected.map((c) => c.fontSize));
   const stepFont = (delta: number): void =>
     commitUpdate(selected.map((c) => ({ id: c.id, fontSize: clampFontSize(c.fontSize + delta) })));
 
@@ -91,7 +115,24 @@ export function SelectionToolbar({ projectId }: { projectId: string }) {
         >
           A−
         </button>
-        <span className="whiteboard__fontsize-value">{commonFontSize ?? '–'}</span>
+        <input
+          type="number"
+          className="whiteboard__fontsize-input"
+          aria-label="Text size"
+          min={FONT_SIZE_MIN}
+          max={FONT_SIZE_MAX}
+          step={1}
+          placeholder="–"
+          value={fontDraft}
+          onChange={(e) => setFontDraft(e.target.value)}
+          onBlur={commitFontSize}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              commitFontSize();
+              e.currentTarget.blur();
+            }
+          }}
+        />
         <button
           type="button"
           className="ghost whiteboard__fontsize-btn"

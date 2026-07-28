@@ -39,6 +39,7 @@ function ConnectionArrowImpl({
   const fromS = worldToScreen(camera, size, from);
   const toS = worldToScreen(camera, size, to);
   const head = toPointsAttr(arrowHead(toS, fromS, ARROW_HEAD_PX));
+  const mid = { x: (fromS.x + toS.x) / 2, y: (fromS.y + toS.y) / 2 };
 
   return (
     <g className={selected ? 'whiteboard__connection is-selected' : undefined}>
@@ -66,6 +67,17 @@ function ConnectionArrowImpl({
         strokeWidth={selected ? CONNECTION_STROKE_PX + 2 : CONNECTION_STROKE_PX}
       />
       <polygon className="whiteboard__connection-head" points={head} fill={connection.color} />
+      {connection.label && (
+        <text
+          className="whiteboard__connection-label"
+          x={mid.x}
+          y={mid.y}
+          textAnchor="middle"
+          dominantBaseline="middle"
+        >
+          {connection.label}
+        </text>
+      )}
     </g>
   );
 }

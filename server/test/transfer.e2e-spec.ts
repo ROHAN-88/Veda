@@ -81,11 +81,17 @@ describe('Project transfer — export/import (e2e)', () => {
       shape: 'ellipse',
     });
     const b = await post(alice, `/api/projects/${pid}/cards`, { x: 100, y: 200 });
-    await post(alice, `/api/projects/${pid}/connections`, {
+    const conn = await post(alice, `/api/projects/${pid}/connections`, {
       sourceCardId: a.id,
       targetCardId: b.id,
       color: '#00ff00',
     });
+    const labelToken = await csrf(alice);
+    await alice
+      .patch(`/api/projects/${pid}/connections/${conn.id}`)
+      .set('X-CSRF-Token', labelToken)
+      .send({ label: 'depends on' })
+      .expect(200);
 
     const doc = (await alice.get(`/api/projects/${pid}/export`).expect(200)).body;
     expect(doc.version).toBe(1);
@@ -94,7 +100,12 @@ describe('Project transfer — export/import (e2e)', () => {
     expect(doc.cards[0]).toMatchObject({ content: 'Hello', color: '#ff0000', shape: 'ellipse' });
     expect(doc.cards[0]).not.toHaveProperty('id');
     expect(doc.connections).toEqual([
-      { sourceRef: doc.cards[0].ref, targetRef: doc.cards[1].ref, color: '#00ff00' },
+      {
+        sourceRef: doc.cards[0].ref,
+        targetRef: doc.cards[1].ref,
+        color: '#00ff00',
+        label: 'depends on',
+      },
     ]);
 
     const imported = await post(alice, '/api/projects/import', doc);
@@ -109,6 +120,7 @@ describe('Project transfer — export/import (e2e)', () => {
     const conns = (await alice.get(`/api/projects/${imported.id}/connections`).expect(200)).body;
     expect(conns).toHaveLength(1);
     expect(conns[0].color).toBe('#00ff00');
+    expect(conns[0].label).toBe('depends on'); // label round-trips
     expect(conns[0].sourceCardId).toBe(cards[0].id); // remapped to the NEW ids
     expect(conns[0].targetCardId).toBe(cards[1].id);
   });

@@ -1053,6 +1053,18 @@ New `store/toolStore.ts` (+ test), `canvas/CanvasToolSwitch.tsx`; `store/panMode
 `usePanZoom`/`useMarquee`/`useCanvasKeyboard`/`CardView`/`WhiteboardCanvas`/`CanvasHud` updated.
 No new dependencies. Supersedes the Phase 8 "middle-drag / Space + left-drag" pan note above.
 
+### Follow-up — font-size input + arrow labels (2026-07-28)
+
+- **Font size:** the card selection toolbar's read-only value became a **number input** (type a size
+  directly, plus the existing `A−`/`A+`); commit clamps to `FONT_SIZE_MIN..MAX` and applies to the
+  whole selection as one undoable edit. Uses the render-time reset pattern (no effect) for the draft.
+- **Arrow labels:** `Connection` gained `label String @default("")` (migration `add_connection_label`).
+  The arrow toolbar has a debounced text input (optimistic, not undoable — like card content), and the
+  label renders at the arrow **midpoint** in the screen-space SVG (`<text>`, XSS-safe; white halo,
+  constant size at any zoom). `UpdateConnectionDto` validates it (`LABEL_MAX = 200`, trimmed). The
+  **transfer format is now versioned-with-label** — export/import round-trip the label (existing shape
+  assertions updated). No new dependencies.
+
 ---
 
 ## Research findings — AFFiNE / BlockSuite

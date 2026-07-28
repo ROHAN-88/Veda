@@ -95,6 +95,8 @@ model Connection {
   targetCardId String
   targetCard   Card    @relation("ConnectionTarget", fields: [targetCardId], references: [id], onDelete: Cascade)
   color        String  @default("#64748b")
+  // Optional label rendered at the arrow's midpoint. Plain text (no markdown).
+  label        String  @default("")
   // Soft delete (Phase 8): a deleted arrow sets `deletedAt`; `create` for the same
   // ordered pair restores it (keeps the id, respects the unique index). Reads
   // filter `deletedAt: null`.

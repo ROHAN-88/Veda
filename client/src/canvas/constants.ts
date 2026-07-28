@@ -63,6 +63,9 @@ export const ARROW_HEAD_PX = 13;
 export const CONNECTION_STROKE_PX = 2;
 export const CONNECTION_HIT_STROKE_PX = 14;
 
+/** Max length of an arrow's midpoint label — mirrors the server `LABEL_MAX`. */
+export const CONNECTION_LABEL_MAX = 200;
+
 /** Arrow-key nudge distance for the selected card, in world px (Shift = large). */
 export const NUDGE_STEP = 1;
 export const NUDGE_STEP_LARGE = 10;

@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   Equals,
@@ -11,6 +11,7 @@ import {
 } from 'class-validator';
 import { HEX_COLOR } from '../../cards/dto/card-bounds';
 import { CreateCardDto } from '../../cards/dto/create-card.dto';
+import { LABEL_MAX } from '../../connections/dto/connection-bounds';
 import { CreateProjectDto } from './create-project.dto';
 
 /**
@@ -47,6 +48,7 @@ export interface TransferConnection {
   sourceRef: string;
   targetRef: string;
   color: string;
+  label: string;
 }
 
 export interface TransferDocument {
@@ -77,6 +79,12 @@ export class ImportConnectionDto {
   @IsString()
   @Matches(HEX_COLOR, { message: 'color must be a #rrggbb hex string' })
   color?: string;
+
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsOptional()
+  @IsString()
+  @MaxLength(LABEL_MAX)
+  label?: string;
 }
 
 /**

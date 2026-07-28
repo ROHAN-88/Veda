@@ -68,6 +68,19 @@
   filter: drop-shadow(0 0 3px var(--accent));
 }
 
+/* Midpoint label — constant screen size (drawn in the non-transformed SVG). The
+   white halo keeps it readable over the line and the grid. */
+.whiteboard__connection-label {
+  fill: #0f172a;
+  font-size: 12px;
+  font-weight: 600;
+  paint-order: stroke;
+  stroke: #fff;
+  stroke-width: 3px;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
 /* Rubber-band preview while dragging from a port. */
 .whiteboard__connection-draft line {
   stroke: var(--accent);

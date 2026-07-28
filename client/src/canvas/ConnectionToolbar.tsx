@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { PALETTE } from './cardShapes';
+import { CONNECTION_LABEL_MAX } from './constants';
 import { useConnectionHistory } from '../hooks/useConnectionHistory';
-import { useConnections } from '../hooks/useConnections';
+import { useConnections, useUpdateConnection } from '../hooks/useConnections';
 import { useDebouncedCallback } from '../hooks/useDebouncedCallback';
 import { useSelectionStore } from '../store/selectionStore';
 
@@ -16,6 +18,7 @@ export function ConnectionToolbar({ projectId }: { projectId: string }) {
   const clear = useSelectionStore((state) => state.clear);
   const { data: connections = [] } = useConnections(projectId);
   const { commitDelete, commitRecolor } = useConnectionHistory(projectId);
+  const { mutate: updateConnection } = useUpdateConnection(projectId);
   const connection = connections.find((c) => c.id === selectedConnectionId) ?? null;
 
   // Dragging the OS colour picker fires onChange rapidly — debounce the commit.
@@ -24,6 +27,23 @@ export function ConnectionToolbar({ projectId }: { projectId: string }) {
       commitRecolor(connection.id, color);
     }
   }, 120);
+
+  // Label edits are a plain optimistic update (not on the undo stack — the text
+  // field owns its own edit history, like card content). Local draft keeps the
+  // input responsive; it re-syncs (render-time reset pattern) only when a DIFFERENT
+  // arrow is selected, so a same-arrow optimistic write can't clobber in-flight typing.
+  const [labelDraft, setLabelDraft] = useState('');
+  const [labelBaseId, setLabelBaseId] = useState<string | null>(null);
+  const currentId = connection?.id ?? null;
+  if (currentId !== labelBaseId) {
+    setLabelBaseId(currentId);
+    setLabelDraft(connection?.label ?? '');
+  }
+  const [setLabel, flushLabel] = useDebouncedCallback((label: string) => {
+    if (connection) {
+      updateConnection({ id: connection.id, patch: { label } });
+    }
+  }, 400);
 
   if (!connection) {
     return null;
@@ -54,6 +74,19 @@ export function ConnectionToolbar({ projectId }: { projectId: string }) {
           onBlur={() => flushColor()}
         />
       </div>
+      <input
+        type="text"
+        className="whiteboard__label-input"
+        aria-label="Arrow label"
+        placeholder="Label…"
+        maxLength={CONNECTION_LABEL_MAX}
+        value={labelDraft}
+        onChange={(e) => {
+          setLabelDraft(e.target.value);
+          setLabel(e.target.value);
+        }}
+        onBlur={() => flushLabel()}
+      />
       <button
         type="button"
         className="ghost danger"

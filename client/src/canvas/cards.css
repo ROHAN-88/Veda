@@ -377,8 +377,9 @@
   line-height: 1;
 }
 
-.whiteboard__fontsize-value {
-  min-width: 1.6rem;
+.whiteboard__fontsize-input {
+  width: 3.2rem;
+  padding: 0.2rem 0.35rem;
   text-align: center;
   font-size: 0.85rem;
   font-variant-numeric: tabular-nums;

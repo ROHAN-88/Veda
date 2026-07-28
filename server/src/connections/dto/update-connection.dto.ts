@@ -1,9 +1,10 @@
-import { IsOptional, IsString, Matches } from 'class-validator';
-import { HEX_COLOR } from './connection-bounds';
+import { Transform } from 'class-transformer';
+import { IsOptional, IsString, Matches, MaxLength } from 'class-validator';
+import { HEX_COLOR, LABEL_MAX } from './connection-bounds';
 
 /**
- * Payload to update a connection. Only the arrow's colour is mutable — the
- * endpoints are fixed at creation. Hand-written mirror DTO (not PartialType),
+ * Payload to update a connection: the arrow's colour and/or its midpoint label.
+ * The endpoints are fixed at creation. Hand-written mirror DTO (not PartialType),
  * matching the cards/projects convention.
  */
 export class UpdateConnectionDto {
@@ -11,4 +12,10 @@ export class UpdateConnectionDto {
   @IsString()
   @Matches(HEX_COLOR, { message: 'color must be a #rrggbb hex string' })
   color?: string;
+
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsOptional()
+  @IsString()
+  @MaxLength(LABEL_MAX)
+  label?: string;
 }

@@ -9,6 +9,7 @@ export interface CreateConnectionInput {
 
 export interface UpdateConnectionInput {
   color?: string;
+  label?: string;
 }
 
 const base = (projectId: string): string =>

@@ -12,3 +12,6 @@ export const DEFAULT_CONNECTION_COLOR = '#64748b';
 
 /** Max ids in a bulk delete/restore request (bounds request size, CWE-400). */
 export const BULK_MAX = 500;
+
+/** Max length of an arrow's midpoint label (plain text; bounds request size, CWE-400). */
+export const LABEL_MAX = 200;
