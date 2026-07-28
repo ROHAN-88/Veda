@@ -12,6 +12,7 @@ import { CardsModule } from './cards/cards.module';
 import { ConnectionsModule } from './connections/connections.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProjectsModule } from './projects/projects.module';
+import { ShareModule } from './share/share.module';
 
 /**
  * Root module. `ConfigModule` validates the environment at boot (fail-fast).
@@ -38,6 +39,7 @@ import { ProjectsModule } from './projects/projects.module';
     ProjectsModule,
     CardsModule,
     ConnectionsModule,
+    ShareModule,
     HealthModule,
   ],
   providers: [

@@ -875,7 +875,8 @@ Multi-select + grouping + undo/redo; **Phase 9** — Sharing / export.
 
 - **Multi-select:** left-drag on empty canvas draws a **rubber-band marquee** (live-selects intersecting
   cards; Shift = additive); **Shift-click** toggles a card; **Ctrl/⌘-A** selects all. Panning moved to
-  **middle-drag** and **Space + left-drag** (wheel/two-finger unchanged).
+  **middle-drag** and **Space + left-drag** (wheel/two-finger unchanged). _(Superseded 2026-07-28 by
+  the Select / Hand tool switch — see the Phase 9 follow-up.)_
 - **Group operations:** dragging any selected card moves the **whole selection** (arrows follow live); the
   toolbar recolours / reshapes / resizes-text / **deletes** the whole selection at once (with an
   all-share-or-mixed highlight + an "N selected" count); Delete and arrow-nudge act on the group.
@@ -946,6 +947,111 @@ useConnectionHistory}.ts`, `canvas/{MarqueeOverlay.tsx,cardsInRect(+test),cardHi
 
 Phase 8 is complete. **Awaiting explicit approval to begin the next phase** (**Phase 9** — Sharing /
 export).
+
+---
+
+## Phase 9 — Sharing & Export (JSON export/import + read-only share links) — 2026-07-28
+
+### What was done
+
+- **Export** a project to a self-contained JSON file (per-project **Export** button → download).
+- **Import** a JSON file as a brand-new project (top-level **Import** button → opens the new board).
+- **Read-only public share links:** a per-project **Share** control mints a `/share/:token` URL that
+  renders the board with **all editing disabled**, viewable by **anyone with the link, without logging
+  in**. Links are **live + revocable** (always reflect the current board; owner can turn off any time;
+  no expiry, no snapshot).
+
+### How it was done
+
+- **Backend — export/import** (`projects` module, new `ProjectTransferService`/`Controller`): the
+  transfer format is **id-free and versioned** — cards carry a local `ref`, arrows point at
+  `sourceRef`/`targetRef`. `GET /projects/:id/export` reuses the owner-scoped `getOwned` (404) + the
+  live-row read filters. `POST /projects/import` is one `$transaction` that mints fresh card ids,
+  remaps refs, sets `zIndex` from array order (preserves stacking), and drops self-loops / dangling
+  refs / duplicate pairs (honours `@@unique`). Nested-array DTO (`@ValidateNested`/`@ArrayMaxSize`)
+  reuses the Phase 8 pattern.
+- **Backend — share** (new `share` module, migration `add_share_links`): a `ShareLink` model
+  (`tokenHash @unique`, `revokedAt?`) mirroring the `Session` show-once/hashed-token convention — the
+  256-bit token is returned **once** and stored only as `sha256`. Owner routes (guarded) on
+  `projects/:projectId/share`: `POST` (revoke-then-create; ≤1 active link), `GET` status, `DELETE`
+  revoke. The **one public, unguarded** route `GET /share/:token` (separate controller, no
+  `SessionAuthGuard`) resolves an active link and returns only `{ project:{id,name}, cards,
+connections }` — 404 for unknown **or** revoked.
+- **Client — read-only canvas:** a `readOnly` prop threads through `WhiteboardCanvas` → HUD (hides
+  `+Card`), `CardsLayer`/`CardView` (no drag/handles/delete/edit), `ConnectionsLayer` (no
+  connect-draft, no arrow-select); `useMarquee`/`useCanvasKeyboard` early-return; **pan/zoom stays
+  on**. `useCards`/`useConnections` gained an `enabled` flag so the anonymous view never calls the
+  owner-scoped endpoints — `SharedWhiteboardPage` **pre-seeds** those caches from the public payload.
+  The `/share/:token` route sits **outside** `ProtectedRoute` (no login redirect). Export downloads a
+  Blob (filename via a pure, tested slugifier); import reads the file through a pure, tested
+  `parseImportFile` guard before POSTing.
+
+### What changed
+
+- **No new dependencies** (`crypto`/`Blob`/`FileReader` are built-ins). Migration `add_share_links`.
+- **New files:** server `projects/{transfer.service,transfer.controller}.ts` +
+  `dto/transfer.dto.ts`, `share/{share.service,share.controller,public-share.controller,share.module}.ts`
+  (+ specs + `test/{transfer,share}.e2e-spec.ts`); client `api/{transfer,share}.ts`,
+  `features/transfer/{parseImportFile,filename,download}.ts` (+ tests), `hooks/{useShare,useTransfer}.ts`,
+  `components/ProjectShareControl.tsx`, `pages/SharedWhiteboardPage.tsx`.
+- **Edited:** `schema.prisma` (+`ShareLink`, `Project.shareLinks`), `app.module` (+`ShareModule`),
+  `projects.module` (+transfer); client `App.tsx` (public route), `ProjectsPage` (export/import/share
+  UI), `WhiteboardCanvas`/`CanvasHud`/`CardsLayer`/`CardView`/`ConnectionsLayer`,
+  `useMarquee`/`useCanvasKeyboard`/`useConnectionDraft`, `useCards`/`useConnections` (`enabled`),
+  `styles/base.css`.
+
+### Security notes (Phase 9 scope)
+
+- **A01/CWE-639 IDOR:** export, import, and all owner share routes are session-guarded and
+  owner-scoped (`getOwned`/`assertProjectOwned` → **404**, never 403); import always creates a project
+  owned by the caller.
+- **Public endpoint (A01/CWE-200/CWE-307):** unauthenticated **by design**, gated by a 256-bit
+  unguessable token stored only as `sha256`; identical **404** on unknown/revoked (no existence leak);
+  **read-only** (no mutation path); payload carries no owner/user/other-project data; a tighter
+  `@Throttle(30/min)` resists enumeration. CSRF: import + share create/revoke require the token
+  (existing middleware); the public GET is CSRF-exempt by default (correct).
+- **CWE-20/400:** import DTO nested-validated + array sizes bounded (`@ArrayMaxSize`); reused field
+  bounds; `forbidNonWhitelisted` strips unknowns; connections validated against `@@unique` + no
+  self-loop. Tokens shown once, never stored raw; revoke = `revokedAt` (mirrors sessions).
+
+### Verification (Phase 9)
+
+| Check                     | Result                                                                                        |
+| ------------------------- | --------------------------------------------------------------------------------------------- |
+| format / lint / typecheck | ✅ all pass (server + client)                                                                 |
+| build (server + client)   | ✅ (main client chunk 367 kB / 114 kB gzip)                                                   |
+| Unit tests                | ✅ **server 60** (+16 transfer/share) · **client 79** (+10 parse/filename)                    |
+| e2e tests (vs Postgres)   | ✅ **40** (+10: export round-trip, import remap/validation, share public-no-auth/revoke/IDOR) |
+| `audit` gate              | ✅ no un-allowlisted high/critical — **no new dependencies**                                  |
+| 500-line/file cap         | ✅ all source files well under (largest touched 206)                                          |
+
+Manual: export downloads `.json`; import re-creates an identical board (layout/colours/shapes/text/
+arrows, stacking preserved); a share link opens read-only in a logged-out browser (pan/zoom only);
+revoking makes the link 404. _(Env note: Docker Desktop had stopped mid-run and was restarted before
+the e2e pass — not a code issue.)_
+
+### Residual risks / follow-ups
+
+- **No share-link expiry** yet (live + revocable only) — an optional `expiresAt` is a clean follow-up.
+- **Import body size** is bounded by DTO array caps but not an explicit Express JSON limit — a
+  deliberate `body-parser` limit is a follow-up if very large boards are expected.
+- No **"fork this shared board to my account"** action yet (viewer can't copy it in-app).
+- Share links **accumulate** revoked rows (no GC), same as soft-deleted rows — a purge job covers both.
+
+### Phase gate
+
+Phase 9 is complete. **Awaiting explicit approval to begin the next phase.**
+
+### Follow-up — canvas tool switch (2026-07-28)
+
+Replaced the implicit left-drag rule with an explicit **Select / Hand** tool switch in the HUD
+(icons next to "+ Card"; `V` / `H` keyboard shortcuts). **Select** = the prior interact + marquee
+behaviour; **Hand** = left-drag anywhere pans the board, with cards inert while it's active
+(Figma/Miro-style). **Removed** the Space-hold and middle-mouse pan gestures (wheel / two-finger
+pan + zoom unchanged); the read-only shared view is treated as Hand so left-drag pans there too.
+New `store/toolStore.ts` (+ test), `canvas/CanvasToolSwitch.tsx`; `store/panModeStore.ts` removed;
+`usePanZoom`/`useMarquee`/`useCanvasKeyboard`/`CardView`/`WhiteboardCanvas`/`CanvasHud` updated.
+No new dependencies. Supersedes the Phase 8 "middle-drag / Space + left-drag" pan note above.
 
 ---
 

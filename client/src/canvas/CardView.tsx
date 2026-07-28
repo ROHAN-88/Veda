@@ -14,11 +14,14 @@ import { useCardResize } from '../hooks/useCardResize';
 import { useDebouncedCallback } from '../hooks/useDebouncedCallback';
 import { useConnectionDraftStore } from '../store/connectionDraftStore';
 import { useLiveRect, useLiveRectStore } from '../store/liveRectStore';
+import { useToolStore } from '../store/toolStore';
 import { useViewportStore } from '../store/viewportStore';
 
 interface CardViewProps {
   card: Card;
   selected: boolean;
+  /** Read-only share view: no drag, edit, delete, resize/rotate, or connect. */
+  readOnly?: boolean;
   onResize: (id: string, bounds: { x: number; y: number; w: number; h: number }) => void;
   onRotate: (id: string, deg: number) => void;
   onEditContent: (id: string, content: string) => void;
@@ -46,7 +49,7 @@ const CardMarkdown = lazy(() =>
  * (react-markdown — no `dangerouslySetInnerHTML`, XSS-safe by construction).
  */
 function CardViewImpl(props: CardViewProps) {
-  const { card, selected } = props;
+  const { card, selected, readOnly = false } = props;
   const [preview, setLocalPreview] = useState<CardRect | null>(null);
   const [editing, setEditing] = useState(false);
 
@@ -117,10 +120,25 @@ function CardViewImpl(props: CardViewProps) {
     CENTERED_SHAPES.has(shape) ? ' shape-centered' : ''
   }`;
 
+  // A card is inert in the read-only share view AND while the Hand (pan) tool is
+  // active: no gesture is attached, no chrome, and it drops `data-no-pan` so a
+  // press over it pans the board instead.
+  const tool = useToolStore((state) => state.tool);
+  const inert = readOnly || tool === 'pan';
+  const interaction = inert
+    ? {}
+    : {
+        onPointerDown: drag.onPointerDown,
+        onPointerMove: drag.onPointerMove,
+        onPointerUp: drag.onPointerUp,
+        onPointerCancel: drag.onPointerUp,
+        onDoubleClick: startEditing,
+      };
+
   return (
     <div
       className={`whiteboard__card-wrapper${drag.dragging ? ' dragging' : ''}`}
-      data-no-pan
+      data-no-pan={inert ? undefined : ''}
       data-card-id={card.id}
       style={{
         left: live.x,
@@ -131,11 +149,7 @@ function CardViewImpl(props: CardViewProps) {
         transformOrigin: 'center',
         zIndex: card.zIndex,
       }}
-      onPointerDown={drag.onPointerDown}
-      onPointerMove={drag.onPointerMove}
-      onPointerUp={drag.onPointerUp}
-      onPointerCancel={drag.onPointerUp}
-      onDoubleClick={startEditing}
+      {...interaction}
     >
       <div
         className={bodyClass}
@@ -168,20 +182,22 @@ function CardViewImpl(props: CardViewProps) {
           </div>
         )}
       </div>
-      <button
-        type="button"
-        className="ghost danger whiteboard__card-delete"
-        aria-label="Delete card"
-        data-no-pan
-        onPointerDown={(e) => e.stopPropagation()}
-        onClick={(e) => {
-          e.stopPropagation();
-          props.onDelete(card.id);
-        }}
-      >
-        ×
-      </button>
-      {selected && (
+      {!inert && (
+        <button
+          type="button"
+          className="ghost danger whiteboard__card-delete"
+          aria-label="Delete card"
+          data-no-pan
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            props.onDelete(card.id);
+          }}
+        >
+          ×
+        </button>
+      )}
+      {selected && !inert && (
         <CardHandles
           onResize={beginResize}
           onRotate={beginRotate}

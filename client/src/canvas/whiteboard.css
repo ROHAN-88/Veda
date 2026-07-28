@@ -6,8 +6,13 @@
   overflow: hidden;
   touch-action: none;
   overscroll-behavior: none;
-  cursor: grab;
+  cursor: default;
   background: #ffffff;
+}
+
+/* Hand tool (or read-only): the board is grabbable. `grabbing` (below) wins mid-drag. */
+.whiteboard.pan-mode {
+  cursor: grab;
 }
 
 .whiteboard.grabbing {
@@ -55,6 +60,25 @@
 
 .whiteboard__hud button {
   padding: 0.35rem 0.6rem;
+}
+
+/* Select / Hand tool switch */
+.whiteboard__tools {
+  display: flex;
+  gap: 0.2rem;
+}
+
+.whiteboard__tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.35rem 0.5rem;
+}
+
+.whiteboard__tool[aria-pressed='true'] {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .whiteboard__zoom {

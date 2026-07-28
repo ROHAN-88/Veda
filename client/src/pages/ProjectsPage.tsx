@@ -1,6 +1,12 @@
-import { type FormEvent, useState } from 'react';
+import { type ChangeEvent, type FormEvent, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { errorMessage } from '../api/client';
+import { transferApi } from '../api/transfer';
+import type { Project } from '../api/types';
+import { ProjectShareControl } from '../components/ProjectShareControl';
+import { downloadJson } from '../features/transfer/download';
+import { exportFilename } from '../features/transfer/filename';
+import { parseImportFile } from '../features/transfer/parseImportFile';
 import { useLogout, useMe } from '../hooks/useAuth';
 import {
   useCreateProject,
@@ -8,6 +14,7 @@ import {
   useProjects,
   useRenameProject,
 } from '../hooks/useProjects';
+import { useImportProject } from '../hooks/useTransfer';
 
 export function ProjectsPage() {
   const { data: user } = useMe();
@@ -15,9 +22,12 @@ export function ProjectsPage() {
   const create = useCreateProject();
   const rename = useRenameProject();
   const remove = useDeleteProject();
+  const importProject = useImportProject();
   const logout = useLogout();
   const navigate = useNavigate();
   const [name, setName] = useState('');
+  const [transferError, setTransferError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const onCreate = (event: FormEvent): void => {
     event.preventDefault();
@@ -39,6 +49,33 @@ export function ProjectsPage() {
     if (window.confirm(`Delete "${projectName}"? This cannot be undone.`)) {
       remove.mutate(id);
     }
+  };
+
+  const onExport = (project: Project): void => {
+    setTransferError(null);
+    transferApi
+      .export(project.id)
+      .then((doc) => downloadJson(exportFilename(project.name), doc))
+      .catch((err) => setTransferError(errorMessage(err)));
+  };
+
+  const onImportFile = (event: ChangeEvent<HTMLInputElement>): void => {
+    const file = event.target.files?.[0];
+    event.target.value = ''; // let the same file be picked again later
+    if (!file) {
+      return;
+    }
+    setTransferError(null);
+    file
+      .text()
+      .then((text) => {
+        const doc = parseImportFile(text); // throws ImportParseError on a bad file
+        importProject.mutate(doc, {
+          onSuccess: (project) => navigate(`/projects/${project.id}`),
+          onError: (err) => setTransferError(errorMessage(err)),
+        });
+      })
+      .catch((err) => setTransferError(errorMessage(err)));
   };
 
   const onLogout = (): void => {
@@ -67,8 +104,24 @@ export function ProjectsPage() {
         <button type="submit" disabled={create.isPending || !name.trim()}>
           Create
         </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="application/json,.json"
+          className="visually-hidden"
+          onChange={onImportFile}
+        />
+        <button
+          type="button"
+          className="ghost"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={importProject.isPending}
+        >
+          Import
+        </button>
       </form>
       {create.isError && <p className="error">{errorMessage(create.error)}</p>}
+      {transferError && <p className="error">{transferError}</p>}
 
       {projects.isLoading && <p className="muted">Loading…</p>}
       {projects.isError && <p className="error">{errorMessage(projects.error)}</p>}
@@ -82,6 +135,10 @@ export function ProjectsPage() {
             <Link to={`/projects/${project.id}`} className="grow">
               {project.name}
             </Link>
+            <ProjectShareControl projectId={project.id} />
+            <button className="ghost" onClick={() => onExport(project)}>
+              Export
+            </button>
             <button className="ghost" onClick={() => onRename(project.id, project.name)}>
               Rename
             </button>

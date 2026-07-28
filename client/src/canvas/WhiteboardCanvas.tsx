@@ -17,7 +17,10 @@ import { useCardHistory } from '../hooks/useCardHistory';
 import { useCards, useCreateCard } from '../hooks/useCards';
 import { useMarquee } from '../hooks/useMarquee';
 import { usePanZoom } from '../hooks/usePanZoom';
+import { useConnectionDraftStore } from '../store/connectionDraftStore';
 import { useHistoryStore } from '../store/historyStore';
+import { useSelectionStore } from '../store/selectionStore';
+import { useToolStore } from '../store/toolStore';
 import { useViewportStore } from '../store/viewportStore';
 
 /**
@@ -25,20 +28,29 @@ import { useViewportStore } from '../store/viewportStore';
  * marquee selection, and keyboard shortcuts, feeds the measured size into the
  * store, and composes the grid, world layer (cards + dev debug), the marquee
  * overlay, the HUD, and the selection toolbars. Cards are created via the HUD
- * "+ Card" button; left-drag on empty canvas draws a selection marquee.
+ * "+ Card" button; the Select/Hand tools decide whether a left-drag marquee-selects
+ * or pans (read-only always pans).
  */
-export function WhiteboardCanvas({ projectId }: { projectId: string }) {
+export function WhiteboardCanvas({
+  projectId,
+  readOnly = false,
+}: {
+  projectId: string;
+  readOnly?: boolean;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const setSize = useViewportStore((state) => state.setSize);
   const ready = useViewportStore((state) => state.size.width > 0);
+  const tool = useToolStore((state) => state.tool);
   const [debugOn, setDebugOn] = useState(false);
   const { mutate: createCard } = useCreateCard(projectId);
-  const { data: cards = [] } = useCards(projectId);
+  const { data: cards = [] } = useCards(projectId, { enabled: !readOnly });
   const { pushCreate } = useCardHistory(projectId);
+  const panning = readOnly || tool === 'pan';
 
-  usePanZoom(containerRef);
-  useMarquee(containerRef, projectId);
-  useCanvasKeyboard(projectId); // Escape / Delete / arrows / Ctrl-A / undo-redo / Space
+  usePanZoom(containerRef, readOnly); // Hand tool / read-only left-drag pans
+  useMarquee(containerRef, projectId, readOnly);
+  useCanvasKeyboard(projectId, readOnly); // Escape / Delete / arrows / Ctrl-A / undo-redo / V·H
 
   useEffect(() => {
     const el = containerRef.current;
@@ -58,6 +70,15 @@ export function WhiteboardCanvas({ projectId }: { projectId: string }) {
   // History is session- AND project-scoped: dump it when the project changes.
   useEffect(() => useHistoryStore.getState().clear, [projectId]);
 
+  // The Hand tool deselects — cards are inert while it's active, so a lingering
+  // selection (and its toolbar) would be confusing.
+  useEffect(() => {
+    if (tool === 'pan') {
+      useSelectionStore.getState().clear();
+      useConnectionDraftStore.getState().clear();
+    }
+  }, [tool]);
+
   const onAddCard = (): void => {
     const world = useViewportStore.getState().camera.center;
     createCard(
@@ -67,21 +88,22 @@ export function WhiteboardCanvas({ projectId }: { projectId: string }) {
   };
 
   return (
-    <div ref={containerRef} className="whiteboard">
+    <div ref={containerRef} className={`whiteboard${panning ? ' pan-mode' : ''}`}>
       {ready && (
         <>
           <BackgroundGrid />
           {/* Arrows paint under the cards but over the grid. */}
-          <ConnectionsLayer projectId={projectId} />
-          <MarqueeOverlay />
+          <ConnectionsLayer projectId={projectId} readOnly={readOnly} />
+          {!readOnly && <MarqueeOverlay />}
           <WorldLayer>
-            <CardsLayer projectId={projectId} />
+            <CardsLayer projectId={projectId} readOnly={readOnly} />
             {import.meta.env.DEV && debugOn && <DebugLayer />}
           </WorldLayer>
         </>
       )}
       <CanvasHud
-        onAddCard={onAddCard}
+        onAddCard={readOnly ? undefined : onAddCard}
+        showTools={!readOnly}
         showDebugToggle={import.meta.env.DEV}
         debugOn={debugOn}
         onToggleDebug={() => setDebugOn((value) => !value)}
@@ -94,8 +116,8 @@ export function WhiteboardCanvas({ projectId }: { projectId: string }) {
           ) : null
         }
       />
-      <SelectionToolbar projectId={projectId} />
-      <ConnectionToolbar projectId={projectId} />
+      {!readOnly && <SelectionToolbar projectId={projectId} />}
+      {!readOnly && <ConnectionToolbar projectId={projectId} />}
     </div>
   );
 }

@@ -6,27 +6,28 @@ import { screenToWorld } from '../canvas/coordinates';
 import type { Card } from '../api/types';
 import { cardsKey } from './useCards';
 import { useMarqueeStore } from '../store/marqueeStore';
-import { usePanModeStore } from '../store/panModeStore';
 import { useSelectionStore } from '../store/selectionStore';
+import { useToolStore } from '../store/toolStore';
 import { useViewportStore } from '../store/viewportStore';
 
 /**
  * Rubber-band marquee selection (Phase 8), wired with native listeners on the
- * canvas container (like usePanZoom). A left-drag over empty canvas (no Space)
- * draws the box and live-selects the intersecting cards; Shift keeps the prior
- * selection (additive). A plain left-press clears the selection. Panning
- * (middle-drag / Space+left) is handled by usePanZoom and mutually excluded here.
+ * canvas container (like usePanZoom). Active only with the Select tool: a left-drag
+ * over empty canvas draws the box and live-selects the intersecting cards; Shift
+ * keeps the prior selection (additive); a plain left-press clears the selection.
+ * The Hand tool pans instead (usePanZoom), so the two are mutually excluded.
  */
 export function useMarquee<T extends HTMLElement>(
   ref: RefObject<T | null>,
   projectId: string,
+  readOnly = false,
 ): void {
   const queryClient = useQueryClient();
 
   useEffect(() => {
     const el = ref.current;
-    if (!el) {
-      return;
+    if (!el || readOnly) {
+      return; // read-only share view has no selection
     }
     const marquee = useMarqueeStore.getState();
     let active: { pointerId: number; base: string[]; additive: boolean } | null = null;
@@ -37,8 +38,8 @@ export function useMarquee<T extends HTMLElement>(
     };
 
     const onPointerDown = (event: PointerEvent) => {
-      if (event.button !== 0 || usePanModeStore.getState().spaceHeld) {
-        return; // left-only, and not while panning
+      if (event.button !== 0 || useToolStore.getState().tool !== 'select') {
+        return; // left-only, and only with the Select tool (Hand tool pans)
       }
       const target = event.target as Element | null;
       if (target && target.closest('button, a, input, [data-no-pan]')) {
@@ -107,5 +108,5 @@ export function useMarquee<T extends HTMLElement>(
         useMarqueeStore.getState().clear();
       }
     };
-  }, [ref, projectId, queryClient]);
+  }, [ref, projectId, queryClient, readOnly]);
 }

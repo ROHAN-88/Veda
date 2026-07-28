@@ -3,6 +3,9 @@
  * driving the viewport store.
  *
  * Design notes:
+ * - A left-drag pans only when the HAND tool is active (or the view is read-only);
+ *   the Select tool leaves left-drag to the marquee (see useMarquee). Middle-mouse
+ *   and Space pans were removed in favour of the explicit tool switch.
  * - The wheel handler is a NATIVE listener registered with `{ passive: false }`
  *   so it can `preventDefault()` — React's synthetic `onWheel` is passive and
  *   cannot reliably stop the browser's page scroll / ctrl+wheel page zoom.
@@ -13,7 +16,7 @@
 import { useEffect } from 'react';
 import type { RefObject } from 'react';
 import { ZOOM_SENSITIVITY } from '../canvas/constants';
-import { usePanModeStore } from '../store/panModeStore';
+import { useToolStore } from '../store/toolStore';
 import { useViewportStore } from '../store/viewportStore';
 
 interface DragState {
@@ -22,7 +25,10 @@ interface DragState {
   lastY: number;
 }
 
-export function usePanZoom<T extends HTMLElement>(ref: RefObject<T | null>): void {
+export function usePanZoom<T extends HTMLElement>(
+  ref: RefObject<T | null>,
+  readOnly = false,
+): void {
   useEffect(() => {
     const el = ref.current;
     if (!el) {
@@ -39,16 +45,16 @@ export function usePanZoom<T extends HTMLElement>(ref: RefObject<T | null>): voi
     };
 
     const onPointerDown = (event: PointerEvent) => {
-      // Pan on the MIDDLE button, or the LEFT button while Space is held. Plain
-      // left-drag on empty canvas is a selection marquee (see useMarquee), not a pan.
-      const wantsPan =
-        event.button === 1 || (event.button === 0 && usePanModeStore.getState().spaceHeld);
+      // Left-drag pans only with the Hand tool (or in the read-only shared view).
+      // The tool is read live so switching tools doesn't re-bind listeners.
+      const wantsPan = event.button === 0 && (readOnly || useToolStore.getState().tool === 'pan');
       if (!wantsPan) {
         return;
       }
-      // Never start a pan when the press begins on an interactive control (HUD).
+      // Never start a pan on an interactive control. Cards drop `data-no-pan` while
+      // inert (Hand/read-only), so a press over a card pans; controls keep it.
       const target = event.target as Element | null;
-      if (target && target.closest('button, a, input, [data-no-pan]')) {
+      if (target && target.closest('button, a, input, textarea, [data-no-pan]')) {
         return;
       }
       drag = { pointerId: event.pointerId, lastX: event.clientX, lastY: event.clientY };
@@ -123,5 +129,5 @@ export function usePanZoom<T extends HTMLElement>(ref: RefObject<T | null>): voi
         el.classList.remove('grabbing');
       }
     };
-  }, [ref]);
+  }, [ref, readOnly]);
 }

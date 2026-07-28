@@ -16,11 +16,11 @@ import { useConnections, useCreateConnection } from './useConnections';
  * server is still the authority (self-link → 400, duplicate → 409); the client
  * checks only to avoid an obviously doomed request.
  */
-export function useConnectionDraft(projectId: string): void {
+export function useConnectionDraft(projectId: string, readOnly = false): void {
   const sourceId = useConnectionDraftStore((state) => state.sourceId);
   const move = useConnectionDraftStore((state) => state.move);
   const clear = useConnectionDraftStore((state) => state.clear);
-  const { data: connections = [] } = useConnections(projectId);
+  const { data: connections = [] } = useConnections(projectId, { enabled: !readOnly });
   const { mutate: createConnection } = useCreateConnection(projectId);
   const { pushCreate } = useConnectionHistory(projectId);
 
@@ -31,8 +31,8 @@ export function useConnectionDraft(projectId: string): void {
   }, [connections]);
 
   useEffect(() => {
-    if (!sourceId) {
-      return;
+    if (readOnly || !sourceId) {
+      return; // read-only share view can't draw arrows
     }
     const onMove = (event: PointerEvent): void => {
       const { camera, size } = useViewportStore.getState();
@@ -58,5 +58,5 @@ export function useConnectionDraft(projectId: string): void {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
     };
-  }, [sourceId, move, clear, createConnection, pushCreate]);
+  }, [readOnly, sourceId, move, clear, createConnection, pushCreate]);
 }

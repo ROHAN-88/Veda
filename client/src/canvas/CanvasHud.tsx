@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { CanvasToolSwitch } from './CanvasToolSwitch';
 import { ZOOM_STEP } from './constants';
 import { useViewportStore } from '../store/viewportStore';
 
@@ -6,18 +7,21 @@ interface CanvasHudProps {
   showDebugToggle: boolean;
   debugOn: boolean;
   onToggleDebug: () => void;
-  /** Create a card at the viewport centre. */
-  onAddCard: () => void;
+  /** Create a card at the viewport centre. Omit to hide the button (read-only view). */
+  onAddCard?: () => void;
+  /** Show the Select / Hand tool switch (hidden in the read-only share view). */
+  showTools?: boolean;
   /** Optional dev-only readout rendered at the left of the HUD. */
   debugSlot?: ReactNode;
 }
 
-/** Floating controls: add card, zoom %, zoom in/out (about centre), reset, debug. */
+/** Floating controls: tool switch, add card, zoom %, zoom in/out, reset, debug. */
 export function CanvasHud({
   showDebugToggle,
   debugOn,
   onToggleDebug,
   onAddCard,
+  showTools,
   debugSlot,
 }: CanvasHudProps) {
   const zoom = useViewportStore((state) => state.camera.zoom);
@@ -25,9 +29,10 @@ export function CanvasHud({
   const reset = useViewportStore((state) => state.reset);
 
   return (
-    <div className="whiteboard__hud">
+    <div className="whiteboard__hud" data-no-pan>
       {debugSlot}
-      <button onClick={onAddCard}>+ Card</button>
+      {showTools && <CanvasToolSwitch />}
+      {onAddCard && <button onClick={onAddCard}>+ Card</button>}
       <span className="whiteboard__hud-divider" aria-hidden="true" />
       {showDebugToggle && (
         <button className="ghost" onClick={onToggleDebug} aria-pressed={debugOn}>

@@ -9,8 +9,8 @@ import { useConnectionHistory } from './useConnectionHistory';
 import { useDebouncedCallback } from './useDebouncedCallback';
 import { useConnectionDraftStore } from '../store/connectionDraftStore';
 import { useHistoryStore } from '../store/historyStore';
-import { usePanModeStore } from '../store/panModeStore';
 import { useSelectionStore } from '../store/selectionStore';
+import { useToolStore } from '../store/toolStore';
 
 /** True while the user is typing in a card's text field — don't hijack keys then. */
 function isEditingText(): boolean {
@@ -27,10 +27,10 @@ const isMod = (event: KeyboardEvent): boolean => event.ctrlKey || event.metaKey;
  * - Arrow keys: nudge every selected card (Shift = larger); one debounced,
  *   undoable commit per key-repeat burst.
  * - Ctrl/⌘-A: select all cards. Ctrl/⌘-Z: undo. Ctrl/⌘-Y or ⌘-⇧-Z: redo.
- * - Space (held): pan mode (left-drag pans instead of drawing a marquee).
+ * - V: Select tool. H: Hand (pan) tool.
  * Delete/arrows/Ctrl-shortcuts are ignored while editing a card's text.
  */
-export function useCanvasKeyboard(projectId: string): void {
+export function useCanvasKeyboard(projectId: string, readOnly = false): void {
   const queryClient = useQueryClient();
   const { mutate: bulkUpdate } = useBulkUpdateCards(projectId);
   const { commitDelete: deleteCards } = useCardHistory(projectId);
@@ -51,6 +51,9 @@ export function useCanvasKeyboard(projectId: string): void {
   }, 160);
 
   useEffect(() => {
+    if (readOnly) {
+      return; // read-only share view: no delete / nudge / undo / select / pan-mode
+    }
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') {
         useSelectionStore.getState().clear();
@@ -97,9 +100,12 @@ export function useCanvasKeyboard(projectId: string): void {
         return;
       }
 
-      if (event.code === 'Space') {
-        event.preventDefault(); // no page scroll; enter pan mode
-        usePanModeStore.getState().setSpaceHeld(true);
+      if (!isMod(event) && (event.key === 'v' || event.key === 'V')) {
+        useToolStore.getState().setTool('select');
+        return;
+      }
+      if (!isMod(event) && (event.key === 'h' || event.key === 'H')) {
+        useToolStore.getState().setTool('pan'); // WhiteboardCanvas clears selection on pan
         return;
       }
 
@@ -128,17 +134,18 @@ export function useCanvasKeyboard(projectId: string): void {
       }
     };
 
-    const onKeyUp = (event: KeyboardEvent): void => {
-      if (event.code === 'Space') {
-        usePanModeStore.getState().setSpaceHeld(false);
-      }
-    };
-
     window.addEventListener('keydown', onKeyDown);
-    window.addEventListener('keyup', onKeyUp);
     return () => {
       window.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('keyup', onKeyUp);
     };
-  }, [projectId, queryClient, bulkUpdate, deleteCards, deleteConnections, push, flushNudge]);
+  }, [
+    readOnly,
+    projectId,
+    queryClient,
+    bulkUpdate,
+    deleteCards,
+    deleteConnections,
+    push,
+    flushNudge,
+  ]);
 }

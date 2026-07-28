@@ -11,11 +11,16 @@ import { nextZIndex } from '../canvas/cardGeometry';
 export const cardsKey = (projectId: string) => ['cards', projectId] as const;
 const connectionsKey = (projectId: string) => ['connections', projectId] as const;
 
-export function useCards(projectId: string) {
+/**
+ * A project's cards. `enabled: false` (read-only share view) keeps the query from
+ * hitting the owner-scoped endpoint — the caller pre-seeds the cache instead, so
+ * an anonymous viewer renders from that seed without ever making an authed request.
+ */
+export function useCards(projectId: string, options?: { enabled?: boolean }) {
   return useQuery<Card[]>({
     queryKey: cardsKey(projectId),
     queryFn: () => cardsApi.list(projectId),
-    enabled: projectId.length > 0,
+    enabled: projectId.length > 0 && (options?.enabled ?? true),
   });
 }
 

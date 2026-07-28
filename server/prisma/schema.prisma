@@ -45,6 +45,7 @@ model Project {
   updatedAt   DateTime     @updatedAt
   cards       Card[]
   connections Connection[]
+  shareLinks  ShareLink[]
 
   @@index([ownerId])
   @@map("projects")
@@ -107,6 +108,23 @@ model Connection {
   @@index([projectId])
   @@index([targetCardId])
   @@map("connections")
+}
+
+/// A read-only public share link for a project (Phase 9). Like a session, the
+/// raw token lives only in the URL the owner shares; the DB holds sha256(token)
+/// for an O(1) indexed lookup. `revokedAt` turns the link off without deleting
+/// the row (mirrors Session revocation). Live model: the public read always
+/// reflects the project's current cards/connections — no snapshot is stored.
+model ShareLink {
+  id        String    @id @default(uuid())
+  projectId String
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  createdAt DateTime  @default(now())
+  revokedAt DateTime?
+
+  @@index([projectId])
+  @@map("share_links")
 }
 
 /// A server-side session. The raw token lives only in the client cookie; the

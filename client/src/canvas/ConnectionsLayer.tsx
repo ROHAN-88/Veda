@@ -19,11 +19,19 @@ import { useViewportStore } from '../store/viewportStore';
  * rects — so this layer no longer re-renders on every drag frame; only arrows
  * touching the moving card do. Also hosts the drag-to-connect gesture + rubber-band.
  */
-export function ConnectionsLayer({ projectId }: { projectId: string }) {
-  useConnectionDraft(projectId);
+const noop = (): void => {};
 
-  const { data: connections = [] } = useConnections(projectId);
-  const { data: cards = [] } = useCards(projectId);
+export function ConnectionsLayer({
+  projectId,
+  readOnly = false,
+}: {
+  projectId: string;
+  readOnly?: boolean;
+}) {
+  useConnectionDraft(projectId, readOnly);
+
+  const { data: connections = [] } = useConnections(projectId, { enabled: !readOnly });
+  const { data: cards = [] } = useCards(projectId, { enabled: !readOnly });
   const camera = useViewportStore((state) => state.camera);
   const size = useViewportStore((state) => state.size);
   const selectedConnectionId = useSelectionStore((state) => state.selectedConnectionId);
@@ -75,8 +83,8 @@ export function ConnectionsLayer({ projectId }: { projectId: string }) {
             target={target}
             camera={camera}
             size={size}
-            selected={conn.id === selectedConnectionId}
-            onSelect={selectConnection}
+            selected={!readOnly && conn.id === selectedConnectionId}
+            onSelect={readOnly ? noop : selectConnection}
           />
         );
       })}

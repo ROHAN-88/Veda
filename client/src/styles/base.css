@@ -165,3 +165,36 @@ button.ghost.danger {
 .list-item .grow:hover {
   text-decoration: underline;
 }
+
+/* Share control (inline in a project row) */
+.share-control {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.share-control .share-url {
+  width: 15rem;
+  max-width: 44vw;
+  font-size: 0.8rem;
+  padding: 0.35rem 0.5rem;
+}
+
+.share-control .error {
+  flex-basis: 100%;
+  font-size: 0.8rem;
+}
+
+/* A hidden file input paired with a visible Import button. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}

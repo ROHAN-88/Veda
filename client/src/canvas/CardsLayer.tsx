@@ -17,8 +17,14 @@ import { useViewportStore } from '../store/viewportStore';
  * edits + bring-to-front do not. Every selected card is kept mounted so a group
  * that spans off-screen still renders and its handles never vanish mid-gesture.
  */
-export function CardsLayer({ projectId }: { projectId: string }) {
-  const { data: cards = [] } = useCards(projectId);
+export function CardsLayer({
+  projectId,
+  readOnly = false,
+}: {
+  projectId: string;
+  readOnly?: boolean;
+}) {
+  const { data: cards = [] } = useCards(projectId, { enabled: !readOnly });
   const camera = useViewportStore((state) => state.camera);
   const size = useViewportStore((state) => state.size);
   const queryClient = useQueryClient();
@@ -102,6 +108,7 @@ export function CardsLayer({ projectId }: { projectId: string }) {
           key={card.id}
           card={card}
           selected={selectedIds.has(card.id)}
+          readOnly={readOnly}
           onResize={onResize}
           onRotate={onRotate}
           onEditContent={onEditContent}

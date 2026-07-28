@@ -9,11 +9,15 @@ import type { Connection } from '../api/types';
 /** React Query cache key for a project's connections. */
 export const connectionsKey = (projectId: string) => ['connections', projectId] as const;
 
-export function useConnections(projectId: string) {
+/**
+ * A project's relation arrows. `enabled: false` (read-only share view) keeps the
+ * query off the owner-scoped endpoint — the caller pre-seeds the cache instead.
+ */
+export function useConnections(projectId: string, options?: { enabled?: boolean }) {
   return useQuery<Connection[]>({
     queryKey: connectionsKey(projectId),
     queryFn: () => connectionsApi.list(projectId),
-    enabled: projectId.length > 0,
+    enabled: projectId.length > 0 && (options?.enabled ?? true),
   });
 }
 
