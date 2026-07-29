@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import type { NextFunction, Request, Response } from 'express';
@@ -26,9 +26,13 @@ export function attachClientStatic(app: NestExpressApplication, dir: string): vo
  * SPA fallback for client-side routes: any GET that accepts HTML and is not `/api…`
  * or `/health` returns `index.html`. Everything else calls `next()`, so the Nest
  * router still handles the API and non-HTML misses 404 normally.
+ *
+ * The shell is read ONCE at startup and the cached string is sent per request —
+ * the path is a fixed build artifact (never request input), so there is no
+ * `sendFile` / path-traversal sink.
  */
 export function attachClientFallback(app: NestExpressApplication, dir: string): void {
-  const indexHtml = join(dir, 'index.html');
+  const indexHtml = readFileSync(join(dir, 'index.html'), 'utf8');
   app.use((req: Request, res: Response, next: NextFunction): void => {
     if (req.method !== 'GET' || !req.accepts('html')) {
       return next();
@@ -36,6 +40,6 @@ export function attachClientFallback(app: NestExpressApplication, dir: string): 
     if (req.path === '/health' || req.path.startsWith('/api')) {
       return next();
     }
-    res.sendFile(indexHtml);
+    res.type('html').send(indexHtml);
   });
 }
