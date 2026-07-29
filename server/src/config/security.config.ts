@@ -56,13 +56,35 @@ export function buildSessionCookieOptions(isProd: boolean, maxAgeMs: number): Co
   };
 }
 
-/** Helmet baseline for a JSON API (no HTML/JS is served from this origin). */
-export const helmetOptions: HelmetOptions = {
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'none'"],
-      frameAncestors: ["'none'"],
-    },
-  },
-  crossOriginResourcePolicy: { policy: 'same-site' },
-};
+/**
+ * Helmet baseline. Two modes:
+ * - `serveClient = false` (API-only, incl. all tests): a locked-down JSON CSP —
+ *   `default-src 'none'`, no HTML/JS is served from this origin.
+ * - `serveClient = true` (single-image build serving the built SPA from this
+ *   origin): a CSP that allows the app's OWN assets. `script-src` stays `'self'`
+ *   (Vite emits hashed module scripts, no inline JS); `'unsafe-inline'` is scoped
+ *   to `style-src` only, which the canvas needs because cards are positioned via
+ *   inline `style={{…}}` attributes.
+ */
+export function buildHelmetOptions(serveClient: boolean): HelmetOptions {
+  const directives: Record<string, string[]> = serveClient
+    ? {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:', 'blob:'],
+        fontSrc: ["'self'"],
+        connectSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        frameAncestors: ["'none'"],
+      }
+    : {
+        defaultSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+      };
+  return {
+    contentSecurityPolicy: { directives },
+    crossOriginResourcePolicy: { policy: 'same-site' },
+  };
+}

@@ -1,0 +1,31 @@
+# Keep the build context small and NEVER ship secrets.
+.git
+.gitignore
+node_modules
+**/node_modules
+dist
+**/dist
+build
+**/build
+*.tsbuildinfo
+
+# Secrets / local env (only .env.example may exist, and it's not needed to build)
+.env
+.env.*
+
+# Tests, coverage, editor, docs, logs — not needed to build the image
+coverage
+**/*.spec.ts
+**/*.test.ts
+**/*.test.tsx
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+docs
+*.log
+npm-debug.log*
+
+# Docker files themselves
+Dockerfile
+.dockerignore

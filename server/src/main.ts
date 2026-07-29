@@ -14,7 +14,8 @@ async function bootstrap(): Promise<void> {
   const config = app.get(ConfigService);
   const nodeEnv = config.getOrThrow<string>('NODE_ENV');
   const port = Number(config.get<string>('PORT') ?? 3000) || 3000;
-  await app.listen(port);
+  // Bind all interfaces so the container is reachable via its published port.
+  await app.listen(port, '0.0.0.0');
   Logger.log(`API listening on http://localhost:${port} (${nodeEnv})`, 'Bootstrap');
 }
 
