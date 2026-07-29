@@ -1075,6 +1075,19 @@ change** — the datasource already reads `DATABASE_URL` only (`prisma.service.t
 `prisma.config.ts`). CI is unaffected: `.github/workflows/ci.yml` uses its own ephemeral Postgres
 **service container**, not compose.
 
+### Follow-up — single-image Docker build for the app (2026-07-28)
+
+Added a root **multi-stage `Dockerfile`** (+ `.dockerignore`) that builds client + server and runs
+**both from one Node process**: NestJS now serves the built SPA and the API on the same origin (the
+`SameSite=Strict` design). Static serving is **opt-in** via a `CLIENT_DIST` env var (set only in the
+image), so tests and API-only dev are untouched. New `config/serve-client.ts` (`useStaticAssets` +
+an `/api`-safe HTML fallback); `helmetOptions` became `buildHelmetOptions(serveClient)` — the strict
+`default-src 'none'` CSP stays for the API, and a self-scoped CSP (scripts `'self'`; `'unsafe-inline'`
+**only** for `style-src`, needed by inline card geometry) applies when serving the SPA; `main.ts` binds
+`0.0.0.0`. Base image **pinned by digest**, **non-root**, HEALTHCHECK on `/health`, secrets only at run
+time (`.env` is dockerignored). DB stays external — the container reaches the host Postgres via
+`host.docker.internal:5432`. **No new dependencies.**
+
 ---
 
 ## Research findings — AFFiNE / BlockSuite

@@ -55,6 +55,36 @@ npm run dev:server        # http://localhost:3000/health
 npm run dev:client        # http://localhost:5173
 ```
 
+## Run the whole app in one Docker image
+
+A single multi-stage image builds the client + server and runs **both** from one Node process — NestJS
+serves the built SPA and the API on the same origin (port 3000). The database is **not** in the image;
+the container reaches your host Postgres via `host.docker.internal`.
+
+```bash
+# Build
+docker build -t second-brain .
+
+# Apply migrations from the host first:  npm run prisma:deploy --workspace server
+# Then run (Postgres runs natively on your host):
+docker run --rm -p 3000:3000 \
+  -e NODE_ENV=development \
+  -e SESSION_SECRET='<32+ character secret>' \
+  -e CORS_ORIGINS='http://localhost:3000' \
+  -e DATABASE_URL='postgresql://sb_app:<password>@host.docker.internal:5432/secondbrain?schema=public' \
+  second-brain
+# → http://localhost:3000  (SPA + /api + /health)
+```
+
+Notes:
+
+- **Host database:** allow the Docker bridge subnet in your Postgres `pg_hba.conf` and ensure
+  `listen_addresses` covers the Docker gateway, so the container can reach `host.docker.internal:5432`.
+- **Cookies over HTTP:** `NODE_ENV=production` sets `Secure`/`__Host-` cookies that browsers drop on
+  plain `http://` — for a local run use `NODE_ENV=development` (above); for real production put the
+  container behind TLS and keep `production`.
+- Secrets are passed at run time only — never baked into the image (`.env` is `.dockerignore`d).
+
 ## Security posture
 
 Security is a constraint on every phase, not a later pass. See the **Security
