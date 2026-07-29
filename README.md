@@ -26,25 +26,29 @@ in spirit, security-first in practice.
 ```
 .
 ├─ docs/PROGRESS.md   # source of truth: history + ADR
-├─ server/           # NestJS API (health module only in Phase 0)
-├─ client/           # Vite + React + TS app (placeholder in Phase 0)
-├─ docker-compose.yml# local PostgreSQL for development
+├─ server/           # NestJS API
+├─ client/           # Vite + React + TS app
 └─ .env.example      # env template (keys only — never commit real secrets)
 ```
 
 ## Getting started (local dev)
 
-Prerequisites: Node.js ≥ 20.19 (see `.nvmrc`), npm, Docker.
+Prerequisites: Node.js ≥ 20.19 (see `.nvmrc`), npm, and a **PostgreSQL ≥ 14 server installed and
+running locally** (default port 5432). No database is bundled — the app connects via `DATABASE_URL`.
 
 ```bash
 # 1. Install all workspace dependencies
 npm install
 
 # 2. Configure environment
-cp .env.example .env      # then fill in values
+cp .env.example .env      # then set DATABASE_URL, SESSION_SECRET, CORS_ORIGINS
 
-# 3. Start the local database (optional in Phase 0 — not yet used)
-docker compose up -d
+# 3. One-time: create the database + a least-privilege role in your local Postgres,
+#    matching the credentials in DATABASE_URL. For example, as a superuser:
+#      CREATE ROLE sb_app LOGIN PASSWORD '<choose-a-password>';
+#      CREATE DATABASE secondbrain OWNER sb_app;
+#    then apply the schema:
+npm run prisma:deploy --workspace server
 
 # 4. Run the API and the web app (separate terminals)
 npm run dev:server        # http://localhost:3000/health

@@ -1065,6 +1065,16 @@ No new dependencies. Supersedes the Phase 8 "middle-drag / Space + left-drag" pa
   **transfer format is now versioned-with-label** — export/import round-trip the label (existing shape
   assertions updated). No new dependencies.
 
+### Follow-up — local dev DB moved off Docker (2026-07-28)
+
+Local development now uses a **natively-installed PostgreSQL on port 5432** instead of the Docker
+container. Removed `docker-compose.yml` and the container-only env keys (`POSTGRES_DB`,
+`POSTGRES_USER`, `POSTGRES_PASSWORD`, `DB_HOST_PORT`); `.env.example` + README updated (create the DB +
+least-privilege role locally, set `DATABASE_URL`, `npm run prisma:deploy`). **No application-code
+change** — the datasource already reads `DATABASE_URL` only (`prisma.service.ts` adapter-pg /
+`prisma.config.ts`). CI is unaffected: `.github/workflows/ci.yml` uses its own ephemeral Postgres
+**service container**, not compose.
+
 ---
 
 ## Research findings — AFFiNE / BlockSuite
