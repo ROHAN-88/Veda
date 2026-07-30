@@ -91,6 +91,11 @@ export function usePanZoom<T extends HTMLElement>(
     };
 
     const onWheel = (event: WheelEvent) => {
+      // A card being edited scrolls its own blocks — don't steal the wheel there.
+      const target = event.target;
+      if (target instanceof Element && target.closest('[data-card-editing]')) {
+        return;
+      }
       event.preventDefault();
       if (!Number.isFinite(event.deltaX) || !Number.isFinite(event.deltaY)) {
         return;

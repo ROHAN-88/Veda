@@ -51,7 +51,11 @@ export class UploadsController {
   )
   upload(@CurrentUser() user: SafeUser, @UploadedFile() file?: UploadedImage) {
     if (!file) {
-      throw new UnsupportedMediaTypeException('An image file is required');
+      // Also the path for a type `fileFilter` rejected (it uses `cb(null, false)`,
+      // which drops the file rather than raising) — so name the accepted types.
+      throw new UnsupportedMediaTypeException(
+        'An image file is required (PNG, JPEG, GIF, or WEBP)',
+      );
     }
     return this.uploads.store(user.id, file.buffer);
   }

@@ -12,10 +12,21 @@ import { useHistoryStore } from '../store/historyStore';
 import { useSelectionStore } from '../store/selectionStore';
 import { useToolStore } from '../store/toolStore';
 
-/** True while the user is typing in a card's text field — don't hijack keys then. */
+/**
+ * True while the user is editing a card — don't hijack keys then. Covers text
+ * fields anywhere, plus anything focused inside an open card editor: a SELECTED
+ * IMAGE block is a `<span>`, and Delete there must remove the image, not the card.
+ */
 function isEditingText(): boolean {
   const el = document.activeElement;
-  return Boolean(el) && (el?.tagName === 'TEXTAREA' || el?.tagName === 'INPUT');
+  if (!el) {
+    return false;
+  }
+  return (
+    el.tagName === 'TEXTAREA' ||
+    el.tagName === 'INPUT' ||
+    el.closest('[data-card-editing]') !== null
+  );
 }
 
 const isMod = (event: KeyboardEvent): boolean => event.ctrlKey || event.metaKey;

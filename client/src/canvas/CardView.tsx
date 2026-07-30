@@ -1,17 +1,22 @@
 import { lazy, memo, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import type {
-  KeyboardEvent,
+  FocusEvent as ReactFocusEvent,
   MouseEvent as ReactMouseEvent,
   PointerEvent as ReactPointerEvent,
 } from 'react';
+import { CardBlockEditor } from './CardBlockEditor';
+import { removeImageBySrc } from './cardBlocks';
 import { CardEditToolbar } from './CardEditToolbar';
 import { CardHandles } from './CardHandles';
 import type { CardRect } from './cardResize';
 import { contrastingTextColor, SHAPE_CLASS, toCardShape } from './cardShapes';
 import { screenToWorld } from './coordinates';
-import { insertAt } from './textInsert';
+import { shouldEndEditing } from './editFocus';
 import type { Card } from '../api/types';
+import { ACCEPTED_IMAGE_TYPES } from '../api/uploads';
+import { useCardBlocks } from '../hooks/useCardBlocks';
 import { useCardDrag, type CardMove } from '../hooks/useCardDrag';
+import { useCardImageUpload } from '../hooks/useCardImageUpload';
 import { useCardResize } from '../hooks/useCardResize';
 import { useDebouncedCallback } from '../hooks/useDebouncedCallback';
 import { useConnectionDraftStore } from '../store/connectionDraftStore';
@@ -51,9 +56,10 @@ const CardMarkdown = lazy(() =>
  * (react-markdown — no `dangerouslySetInnerHTML`, XSS-safe by construction).
  */
 function CardViewImpl(props: CardViewProps) {
-  const { card, selected, readOnly = false } = props;
+  const { card, selected, readOnly = false, onEditContent } = props;
   const [preview, setLocalPreview] = useState<CardRect | null>(null);
   const [editing, setEditing] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
 
   // Drive the card's own paint AND mirror the live geometry into the shared store
   // so the arrow layer can re-anchor connections to this card while it moves.
@@ -97,39 +103,117 @@ function CardViewImpl(props: CardViewProps) {
   });
 
   const [saveContent, flushContent, cancelContent] = useDebouncedCallback(
-    (value: string) => props.onEditContent(card.id, value),
+    (value: string) => onEditContent(card.id, value),
     400,
   );
 
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [editError, setEditError] = useState<string | null>(null);
 
-  // Drop a media snippet (image/video/link Markdown) at the textarea caret. The
-  // textarea is uncontrolled, so set its value imperatively and schedule the save.
-  const insertSnippet = useCallback(
-    (snippet: string): void => {
-      const ta = textareaRef.current;
-      if (!ta) {
-        return;
+  // Mirror of the newest content, including keystrokes not yet debounced to the
+  // server. The editor unmounts with edit mode, so this is the only reliable base
+  // for an append once it's gone. Only a GENUINE change of the prop is adopted —
+  // re-reading `card.content` unconditionally would resurrect the pre-edit text in
+  // the window before our own save lands in the cache.
+  const contentRef = useRef(card.content);
+  const lastPropContent = useRef(card.content);
+  useEffect(() => {
+    if (card.content !== lastPropContent.current) {
+      lastPropContent.current = card.content;
+      if (!editing) {
+        contentRef.current = card.content;
       }
-      const { value, caret } = insertAt(ta.value, ta.selectionStart, ta.selectionEnd, snippet);
-      ta.value = value;
-      saveContent(value);
-      ta.focus();
-      ta.setSelectionRange(caret, caret);
+    }
+  }, [card.content, editing]);
+
+  // Every block edit reports the rejoined Markdown through the one debounced save.
+  const onBlocksChange = useCallback(
+    (content: string): void => {
+      contentRef.current = content;
+      saveContent(content);
     },
     [saveContent],
   );
+  const blocks = useCardBlocks(onBlocksChange);
+
+  // `editing` as a ref: an upload can land after edit mode has already closed, and
+  // the mutation callback captured the value from when the pick started.
+  const editingRef = useRef(false);
+  useEffect(() => {
+    editingRef.current = editing;
+  }, [editing]);
+
+  /** Write content directly (used when the editor isn't open). */
+  const replaceContent = useCallback(
+    (next: string): void => {
+      contentRef.current = next;
+      onEditContent(card.id, next);
+    },
+    [card.id, onEditContent],
+  );
+
+  // Video/link Markdown goes in at the caret; if editing already ended, append it
+  // rather than dropping it.
+  const insertSnippet = useCallback(
+    (snippet: string): void => {
+      if (editingRef.current) {
+        blocks.insertText(snippet);
+        return;
+      }
+      replaceContent(contentRef.current ? `${contentRef.current}\n\n${snippet}` : snippet);
+    },
+    [blocks, replaceContent],
+  );
+
+  /** An uploaded image becomes its own block at the caret, splitting the text. */
+  const insertImage = useCallback(
+    (url: string): void => {
+      if (editingRef.current) {
+        blocks.insertImage(url);
+        return;
+      }
+      const snippet = `![](${url})`;
+      replaceContent(contentRef.current ? `${contentRef.current}\n${snippet}` : snippet);
+    },
+    [blocks, replaceContent],
+  );
+
+  /** The × on a rendered image — removes only that image, never the card. */
+  const onRemoveImage = useCallback(
+    (src: string): void => replaceContent(removeImageBySrc(contentRef.current, src)),
+    [replaceContent],
+  );
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageUpload = useCardImageUpload(fileInputRef, insertImage, setEditError);
+
+  // Where the double-click landed, so the editor opens on that paragraph.
+  const [openFocusY, setOpenFocusY] = useState<number | null>(null);
 
   const startEditing = (event: ReactMouseEvent<HTMLDivElement>): void => {
     event.stopPropagation(); // don't let the canvas create a new card under us
     setEditError(null);
+    setOpenFocusY(event.clientY);
+    blocks.reset(contentRef.current);
     setEditing(true);
   };
 
-  const onTextareaKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
-    if (event.key === 'Escape') {
-      cancelContent();
+  const cancelEditing = (): void => {
+    cancelContent();
+    setEditing(false);
+  };
+
+  // Save on every blur, but only LEAVE edit mode on a real click-away: focus moving
+  // between blocks or onto an image's × stays inside the card, and the media
+  // toolbar's file picker and prompts blur the whole document (see `editFocus`).
+  const onEditorBlur = (event: ReactFocusEvent<HTMLDivElement>): void => {
+    flushContent();
+    if (
+      shouldEndEditing({
+        nextFocus: event.relatedTarget,
+        container: wrapperRef.current,
+        documentHasFocus: document.hasFocus(),
+      })
+    ) {
       setEditing(false);
     }
   };
@@ -160,9 +244,12 @@ function CardViewImpl(props: CardViewProps) {
 
   return (
     <div
+      ref={wrapperRef}
       className={`whiteboard__card-wrapper${drag.dragging ? ' dragging' : ''}`}
       data-no-pan={inert ? undefined : ''}
       data-card-id={card.id}
+      // Tells the canvas keyboard layer not to hijack Delete/arrows in here.
+      data-card-editing={editing ? '' : undefined}
       style={{
         left: live.x,
         top: live.y,
@@ -174,15 +261,31 @@ function CardViewImpl(props: CardViewProps) {
       }}
       {...interaction}
     >
+      {/* Mounted for the card's whole lifetime, not just while editing: the native
+          picker outlives edit mode, and a `change` on a detached input is lost.
+          Hidden from focus + a11y — the toolbar's "Image" button is its label. */}
+      {!inert && (
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept={ACCEPTED_IMAGE_TYPES}
+          className="visually-hidden"
+          tabIndex={-1}
+          aria-hidden
+          onChange={imageUpload.onFileChange}
+        />
+      )}
       {editing && (
-        <>
-          <CardEditToolbar onInsert={insertSnippet} onError={setEditError} />
-          {editError && (
-            <div className="whiteboard__card-edit-error" data-no-pan>
-              {editError}
-            </div>
-          )}
-        </>
+        <CardEditToolbar
+          onInsert={insertSnippet}
+          onPickImage={imageUpload.pickImage}
+          uploading={imageUpload.isPending}
+        />
+      )}
+      {editError && (
+        <div className="whiteboard__card-edit-error" data-no-pan>
+          {editError}
+        </div>
       )}
       <div
         className={bodyClass}
@@ -193,22 +296,15 @@ function CardViewImpl(props: CardViewProps) {
         }}
       >
         {editing ? (
-          <textarea
-            ref={textareaRef}
-            className="whiteboard__card-textarea"
-            data-no-pan
-            autoFocus
-            defaultValue={card.content}
-            onChange={(e) => saveContent(e.target.value)}
-            onBlur={() => {
-              flushContent();
-              setEditing(false);
-            }}
-            onKeyDown={onTextareaKeyDown}
+          <CardBlockEditor
+            api={blocks}
+            initialFocusY={openFocusY}
+            onBlur={onEditorBlur}
+            onEscape={cancelEditing}
           />
         ) : card.content ? (
           <Suspense fallback={<div className="whiteboard__card-content">{card.content}</div>}>
-            <CardMarkdown source={card.content} />
+            <CardMarkdown source={card.content} onRemoveImage={inert ? undefined : onRemoveImage} />
           </Suspense>
         ) : (
           <div className="whiteboard__card-content whiteboard__card-placeholder">

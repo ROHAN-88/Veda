@@ -1108,6 +1108,50 @@ added via **Image / Video / Link** buttons in the card editor.
 - Follow-ups: disk GC of orphaned files, per-user quota, project-scoped cascade, external-image support
   behind `img-src https:`, uploaded-video support.
 
+### Fix — media toolbar was invisible and image picks were silently dropped (2026-07-30)
+
+Two bugs made the card media toolbar unusable:
+
+- **Invisible toolbar.** `.whiteboard__card-edit-toolbar` hard-coded a white background but never set
+  `color`; its `.ghost` buttons are `color: inherit`, which resolves to **white** under the root's
+  `color-scheme: light dark` on a dark OS theme — white-on-white. Now uses the adaptive
+  `Canvas`/`CanvasText` pair like every other floating panel, which also restores `--border`
+  (= `currentColor 18%`).
+- **Upload never completed.** Opening the native file picker blurs the document, and the textarea's
+  `onBlur` ended edit mode unconditionally → the toolbar (and its file input + mutation) unmounted while
+  the picker was open → the `change` event fired on a detached node and never reached React. Fixed by
+  (a) `shouldEndEditing` (pure, unit-tested) — a blur that is document-level focus loss, or focus moving
+  into the card's own chrome, no longer exits edit mode; (b) moving the file input and the upload
+  mutation into `CardView` (`useCardImageUpload`) so they outlive edit mode. Same blur guard also
+  stabilises the `window.prompt`-based Video/Link buttons.
+- Also: client-side 5 MB pre-check (mirrors `MAX_UPLOAD_BYTES`) instead of a raw 413, and the server's
+  415 now names the accepted types. **No new dependencies.**
+
+### Follow-up — in-place block editor: images and text together in a card (2026-07-30)
+
+Editing a card used to swap its rendered content for one full-height textarea of raw Markdown, so a
+picture vanished while you typed and the only delete affordance (the red ×) removed the whole card.
+Cards are now edited as an ordered stack of **blocks** — text blocks are textareas, image blocks stay
+rendered as pictures where they were authored.
+
+- **`cardBlocks.ts` (pure, 31 tests).** `splitBlocks`/`joinBlocks` view `card.content` as blocks;
+  **storage is unchanged** (still one Markdown string). Only a line that is _solely_ an image becomes an
+  image block — an image inside a sentence stays text, so nothing the user wrote is ever reordered. Join
+  drops the empty slots `editableBlocks` adds, which makes the round-trip idempotent. An image line is
+  only lifted into a block if its src passes the **same** `transformCardUrl` policy the renderer applies,
+  so the editor can't load an external image the display path would have dropped.
+- **`CardBlockEditor` + `useCardBlocks`.** Insert-at-caret splits the current text block so an upload
+  lands exactly where the cursor was; arrows walk across images between blocks; Backspace at the start of
+  a block selects the image above it and a second press removes it — two steps, because card content
+  edits are **not** on the undo stack.
+- **`CardImageBlock`** carries a × that removes only that image; used by the editor _and_ by
+  `CardMarkdown` (via an optional `onRemoveImage`, omitted in the read-only share view — without it the
+  rendered markup is unchanged, so the XSS/security tests still pass untouched).
+- Canvas keyboard/wheel now defer to a card marked `data-card-editing`: Delete on a selected image block
+  removes the image rather than the card, and the wheel scrolls the block stack instead of panning.
+- Known follow-up: a video embed's iframe swallows pointer events, so a card that is mostly a video is
+  hard to double-click into — fixing it means an overlay that costs one-click playback.
+
 ---
 
 ## Research findings — AFFiNE / BlockSuite

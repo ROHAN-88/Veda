@@ -1,6 +1,8 @@
+import { useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import type { Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { CardImageBlock } from './CardImageBlock';
 import { CardVideoEmbed } from './CardVideoEmbed';
 import { parseVideoEmbed, transformCardUrl } from './media';
 
@@ -39,13 +41,34 @@ const COMPONENTS: Components = {
     ) : null,
 };
 
-export function CardMarkdown({ source }: { source: string }) {
+/** Interactive variant: each image gains a × that removes only that image. */
+function removableComponents(onRemoveImage: (src: string) => void): Components {
+  return {
+    ...COMPONENTS,
+    img: ({ src, alt }) =>
+      typeof src === 'string' && src.length > 0 ? (
+        <CardImageBlock src={src} alt={alt ?? ''} onRemove={() => onRemoveImage(src)} />
+      ) : null,
+  };
+}
+
+interface CardMarkdownProps {
+  source: string;
+  /** Omitted in the read-only share view — then the markup is the plain one above. */
+  onRemoveImage?: (src: string) => void;
+}
+
+export function CardMarkdown({ source, onRemoveImage }: CardMarkdownProps) {
+  const components = useMemo(
+    () => (onRemoveImage ? removableComponents(onRemoveImage) : COMPONENTS),
+    [onRemoveImage],
+  );
   return (
     <div className="whiteboard__card-content whiteboard__card-markdown">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         urlTransform={transformCardUrl}
-        components={COMPONENTS}
+        components={components}
       >
         {source}
       </ReactMarkdown>

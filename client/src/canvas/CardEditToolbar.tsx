@@ -1,34 +1,18 @@
-import { useRef } from 'react';
-import { errorMessage } from '../api/client';
-import { useUploadImage } from '../hooks/useUpload';
-
 interface CardEditToolbarProps {
-  /** Insert a Markdown snippet at the textarea's caret. */
+  /** Insert a Markdown snippet at the caret. */
   onInsert: (snippet: string) => void;
-  onError: (message: string) => void;
+  /** Open the native image picker (the input itself lives in `CardView`). */
+  onPickImage: () => void;
+  uploading: boolean;
 }
 
 /**
  * Media helpers shown while editing a card: upload an image, embed a YouTube/Vimeo
- * video, or insert a link. Buttons `preventDefault` on mousedown so they never
- * steal focus from (and thus close) the textarea while it's being edited.
+ * video, or insert a link. Presentational — the file input and the upload mutation
+ * are owned by `CardView` so they survive the focus loss the picker causes. Buttons
+ * `preventDefault` on mousedown so they never steal focus from the editor.
  */
-export function CardEditToolbar({ onInsert, onError }: CardEditToolbarProps) {
-  const fileRef = useRef<HTMLInputElement>(null);
-  const upload = useUploadImage();
-
-  const onFile = (event: React.ChangeEvent<HTMLInputElement>): void => {
-    const file = event.target.files?.[0];
-    event.target.value = ''; // allow re-picking the same file
-    if (!file) {
-      return;
-    }
-    upload.mutate(file, {
-      onSuccess: (res) => onInsert(`![](${res.url})`),
-      onError: (err) => onError(errorMessage(err)),
-    });
-  };
-
+export function CardEditToolbar({ onInsert, onPickImage, uploading }: CardEditToolbarProps) {
   const onVideo = (): void => {
     const url = window.prompt('YouTube or Vimeo URL')?.trim();
     if (url) {
@@ -53,10 +37,10 @@ export function CardEditToolbar({ onInsert, onError }: CardEditToolbarProps) {
         type="button"
         className="ghost"
         onMouseDown={keepFocus}
-        onClick={() => fileRef.current?.click()}
-        disabled={upload.isPending}
+        onClick={onPickImage}
+        disabled={uploading}
       >
-        {upload.isPending ? '…' : 'Image'}
+        {uploading ? '…' : 'Image'}
       </button>
       <button type="button" className="ghost" onMouseDown={keepFocus} onClick={onVideo}>
         Video
@@ -64,13 +48,6 @@ export function CardEditToolbar({ onInsert, onError }: CardEditToolbarProps) {
       <button type="button" className="ghost" onMouseDown={keepFocus} onClick={onLink}>
         Link
       </button>
-      <input
-        ref={fileRef}
-        type="file"
-        accept="image/png,image/jpeg,image/gif,image/webp"
-        className="visually-hidden"
-        onChange={onFile}
-      />
     </div>
   );
 }
