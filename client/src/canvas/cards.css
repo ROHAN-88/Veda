@@ -192,6 +192,35 @@
   flex-direction: column;
 }
 
+/* Uploaded image (same-origin) inside a card. */
+.whiteboard__card-media-img {
+  display: block;
+  max-width: 100%;
+  max-height: 8em;
+  margin: 0.35em auto;
+  border-radius: 6px;
+  object-fit: contain;
+}
+
+/* Sandboxed video embed — responsive 16:9 within the card. */
+.whiteboard__card-embed {
+  display: block;
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  margin: 0.35em 0;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #000;
+}
+.whiteboard__card-embed iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
 .whiteboard__card-delete {
   position: absolute;
   top: 2px;
@@ -207,6 +236,38 @@
 .whiteboard__card-wrapper:hover .whiteboard__card-delete,
 .whiteboard__card-wrapper:focus-within .whiteboard__card-delete {
   opacity: 1;
+}
+
+/* Media insert helpers while editing — floats just above the card. */
+.whiteboard__card-edit-toolbar {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 0;
+  z-index: 2;
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.2rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+.whiteboard__card-edit-toolbar button {
+  padding: 0.15rem 0.45rem;
+  font-size: 0.8rem;
+}
+
+.whiteboard__card-edit-error {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 2;
+  max-width: 100%;
+  padding: 0.2rem 0.4rem;
+  font-size: 0.75rem;
+  color: #fff;
+  background: var(--danger);
+  border-radius: 6px;
 }
 
 /* Selection outline + resize/rotate handles.

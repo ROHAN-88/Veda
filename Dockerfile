@@ -32,7 +32,8 @@ WORKDIR /app
 
 ENV NODE_ENV=production \
     PORT=3000 \
-    CLIENT_DIST=/app/client/dist
+    CLIENT_DIST=/app/client/dist \
+    UPLOAD_DIR=/app/uploads
 
 # Prod node_modules + compiled server (incl. generated Prisma client) + built SPA.
 COPY --from=builder --chown=node:node /app/node_modules ./node_modules
@@ -40,6 +41,11 @@ COPY --from=builder --chown=node:node /app/package.json ./package.json
 COPY --from=builder --chown=node:node /app/server/package.json ./server/package.json
 COPY --from=builder --chown=node:node /app/server/dist ./server/dist
 COPY --from=builder --chown=node:node /app/client/dist ./client/dist
+
+# Uploaded image BYTES live here (metadata is in Postgres). Mount a host volume to
+# persist them across container restarts.
+RUN mkdir -p /app/uploads && chown node:node /app/uploads
+VOLUME ["/app/uploads"]
 
 USER node
 EXPOSE 3000

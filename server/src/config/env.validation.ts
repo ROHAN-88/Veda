@@ -43,6 +43,13 @@ export class EnvironmentVariables {
   @IsString()
   @MinLength(1)
   CORS_ORIGINS!: string;
+
+  /** Directory for uploaded image bytes (metadata lives in Postgres). Optional —
+   *  defaults to `<cwd>/uploads`; set to a mounted volume in the container. */
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  UPLOAD_DIR?: string;
 }
 
 export function validateEnv(config: Record<string, unknown>): EnvironmentVariables {

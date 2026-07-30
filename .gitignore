@@ -11,6 +11,9 @@ build/
 # Prisma generated client (regenerated from schema; Prisma 7 emits TS under src/)
 server/src/generated/
 
+# Uploaded user files (bytes on disk; metadata is in Postgres) — never commit
+uploads/
+
 # Secrets & local env — NEVER commit populated env files (CWE-798)
 .env
 .env.*
