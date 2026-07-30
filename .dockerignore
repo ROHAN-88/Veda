@@ -13,6 +13,9 @@ build
 .env
 .env.*
 
+# Uploaded user files (runtime data — never part of the build context)
+uploads
+
 # Tests, coverage, editor, docs, logs — not needed to build the image
 coverage
 **/*.spec.ts

@@ -72,11 +72,14 @@ export function buildHelmetOptions(serveClient: boolean): HelmetOptions {
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
-        imgSrc: ["'self'", 'data:', 'blob:'],
+        imgSrc: ["'self'", 'data:', 'blob:'], // uploaded images are same-origin (/api/uploads)
+        mediaSrc: ["'self'"],
         fontSrc: ["'self'"],
         connectSrc: ["'self'"],
         objectSrc: ["'none'"],
         baseUri: ["'self'"],
+        // Card video embeds — allowlisted providers only, in a sandboxed iframe.
+        frameSrc: ["'self'", 'https://www.youtube-nocookie.com', 'https://player.vimeo.com'],
         frameAncestors: ["'none'"],
       }
     : {

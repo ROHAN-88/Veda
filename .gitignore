@@ -11,6 +11,13 @@ build/
 # Prisma generated client (regenerated from schema; Prisma 7 emits TS under src/)
 server/src/generated/
 
+# Uploaded user files (bytes on disk; metadata is in Postgres) — never commit.
+# Anchored with a leading slash: a bare `uploads/` matches at ANY depth and would
+# also swallow the source module server/src/uploads/. UPLOAD_DIR defaults to
+# <cwd>/uploads; in Docker it is /app/uploads (a mounted volume).
+/uploads/
+/server/uploads/
+
 # Secrets & local env — NEVER commit populated env files (CWE-798)
 .env
 .env.*

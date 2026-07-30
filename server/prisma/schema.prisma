@@ -31,8 +31,24 @@ model User {
   updatedAt        DateTime  @updatedAt
   sessions         Session[]
   projects         Project[]
+  uploads          Upload[]
 
   @@map("users")
+}
+
+/// An uploaded image. DBA note: the file BYTES live on disk (UPLOAD_DIR), NOT in
+/// Postgres — this row is metadata only. Served publicly by its unguessable id
+/// (a capability URL, like a share token) so images load in read-only share views.
+model Upload {
+  id        String   @id @default(uuid())
+  ownerId   String
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  mimeType  String
+  sizeBytes Int
+  createdAt DateTime @default(now())
+
+  @@index([ownerId])
+  @@map("uploads")
 }
 
 /// A workspace owned by a single user. Holds the whiteboard of cards.
