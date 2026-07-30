@@ -1088,6 +1088,26 @@ an `/api`-safe HTML fallback); `helmetOptions` became `buildHelmetOptions(serveC
 time (`.env` is dockerignored). DB stays external — the container reaches the host Postgres via
 `host.docker.internal:5432`. **No new dependencies.**
 
+### Follow-up — card media: image upload + YouTube/Vimeo embeds + link helpers (2026-07-29)
+
+Each card's Markdown can now hold **uploaded images**, **YouTube/Vimeo video embeds**, and **links**,
+added via **Image / Video / Link** buttons in the card editor.
+
+- **Uploads (DBA: metadata-in-DB, bytes-on-disk).** New `Upload` model (migration `add_uploads`) holds
+  only `{ ownerId, mimeType, sizeBytes }`; the bytes live under `UPLOAD_DIR` keyed by a random UUID.
+  `POST /api/uploads` (session + CSRF, `FileInterceptor`, 5 MB limit, **magic-byte** content sniff —
+  raster only, **no SVG**); `GET /api/uploads/:id` is **public** (unguessable id, `StreamableFile`,
+  `nosniff`, `ParseUUIDPipe` → no traversal) so images load in read-only share views too.
+- **Rendering** reuses the XSS-safe react-markdown pipeline: images re-enabled but `urlTransform`
+  limits `src` to same-origin uploads; a YouTube/Vimeo link renders a **sandboxed iframe** built from a
+  validated id (never the raw URL); links unchanged. CSP (serve-client mode) adds a `frame-src`
+  allowlist (youtube-nocookie / vimeo).
+- **No new runtime dependency** — `multer` is already transitive via `@nestjs/platform-express`, and the
+  file is typed with a minimal local interface (no `@types/multer`). Docker gains an `/app/uploads`
+  volume + `UPLOAD_DIR`.
+- Follow-ups: disk GC of orphaned files, per-user quota, project-scoped cascade, external-image support
+  behind `img-src https:`, uploaded-video support.
+
 ---
 
 ## Research findings — AFFiNE / BlockSuite

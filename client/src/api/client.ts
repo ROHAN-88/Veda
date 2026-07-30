@@ -51,7 +51,12 @@ async function send(
     if (csrfToken) {
       headers.set('X-CSRF-Token', csrfToken);
     }
-    if (options.body != null && !headers.has('Content-Type')) {
+    // FormData sets its own multipart boundary — don't override it.
+    if (
+      options.body != null &&
+      !(options.body instanceof FormData) &&
+      !headers.has('Content-Type')
+    ) {
       headers.set('Content-Type', 'application/json');
     }
   }

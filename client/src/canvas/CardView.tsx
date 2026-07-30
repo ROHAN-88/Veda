@@ -1,13 +1,15 @@
-import { lazy, memo, Suspense, useCallback, useEffect, useState } from 'react';
+import { lazy, memo, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import type {
   KeyboardEvent,
   MouseEvent as ReactMouseEvent,
   PointerEvent as ReactPointerEvent,
 } from 'react';
+import { CardEditToolbar } from './CardEditToolbar';
 import { CardHandles } from './CardHandles';
 import type { CardRect } from './cardResize';
 import { contrastingTextColor, SHAPE_CLASS, toCardShape } from './cardShapes';
 import { screenToWorld } from './coordinates';
+import { insertAt } from './textInsert';
 import type { Card } from '../api/types';
 import { useCardDrag, type CardMove } from '../hooks/useCardDrag';
 import { useCardResize } from '../hooks/useCardResize';
@@ -99,8 +101,29 @@ function CardViewImpl(props: CardViewProps) {
     400,
   );
 
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [editError, setEditError] = useState<string | null>(null);
+
+  // Drop a media snippet (image/video/link Markdown) at the textarea caret. The
+  // textarea is uncontrolled, so set its value imperatively and schedule the save.
+  const insertSnippet = useCallback(
+    (snippet: string): void => {
+      const ta = textareaRef.current;
+      if (!ta) {
+        return;
+      }
+      const { value, caret } = insertAt(ta.value, ta.selectionStart, ta.selectionEnd, snippet);
+      ta.value = value;
+      saveContent(value);
+      ta.focus();
+      ta.setSelectionRange(caret, caret);
+    },
+    [saveContent],
+  );
+
   const startEditing = (event: ReactMouseEvent<HTMLDivElement>): void => {
     event.stopPropagation(); // don't let the canvas create a new card under us
+    setEditError(null);
     setEditing(true);
   };
 
@@ -151,6 +174,16 @@ function CardViewImpl(props: CardViewProps) {
       }}
       {...interaction}
     >
+      {editing && (
+        <>
+          <CardEditToolbar onInsert={insertSnippet} onError={setEditError} />
+          {editError && (
+            <div className="whiteboard__card-edit-error" data-no-pan>
+              {editError}
+            </div>
+          )}
+        </>
+      )}
       <div
         className={bodyClass}
         style={{
@@ -161,6 +194,7 @@ function CardViewImpl(props: CardViewProps) {
       >
         {editing ? (
           <textarea
+            ref={textareaRef}
             className="whiteboard__card-textarea"
             data-no-pan
             autoFocus

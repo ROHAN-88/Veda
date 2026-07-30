@@ -72,9 +72,14 @@ docker run --rm -p 3000:3000 \
   -e SESSION_SECRET='<32+ character secret>' \
   -e CORS_ORIGINS='http://localhost:3000' \
   -e DATABASE_URL='postgresql://sb_app:<password>@host.docker.internal:5432/secondbrain?schema=public' \
+  -v second-brain-uploads:/app/uploads \
   second-brain
 # → http://localhost:3000  (SPA + /api + /health)
 ```
+
+Cards can hold Markdown plus **uploaded images**, **YouTube/Vimeo video embeds**, and **links** (use
+the Image / Video / Link buttons while editing a card). Uploaded image _bytes_ are stored on disk under
+`UPLOAD_DIR` (only metadata is in Postgres) — mount a volume (above) so they persist across restarts.
 
 Notes:
 

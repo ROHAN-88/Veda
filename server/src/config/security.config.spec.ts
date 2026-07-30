@@ -24,5 +24,8 @@ describe('buildHelmetOptions', () => {
     expect(d.connectSrc).toEqual(["'self'"]);
     expect(d.frameAncestors).toEqual(["'none'"]);
     expect(d.objectSrc).toEqual(["'none'"]);
+    // Video embeds: allowlisted providers only.
+    expect(d.frameSrc).toContain('https://www.youtube-nocookie.com');
+    expect(d.frameSrc).toContain('https://player.vimeo.com');
   });
 });
