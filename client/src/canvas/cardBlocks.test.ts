@@ -6,8 +6,11 @@ import {
   nearestTextBlock,
   removeImageAt,
   removeImageBySrc,
+  setImageWidthAt,
+  setImageWidthBySrc,
   splitBlocks,
 } from './cardBlocks';
+import { CARD_CONTENT_MAX } from './constants';
 
 const IMG = '/api/uploads/8f3e0c2a-0000-4000-8000-000000000001';
 const IMG2 = '/api/uploads/8f3e0c2a-0000-4000-8000-000000000002';
@@ -40,6 +43,20 @@ describe('splitBlocks', () => {
   it('handles empty content', () => {
     expect(splitBlocks('')).toEqual([{ kind: 'text', text: '' }]);
   });
+
+  it('reads an explicit width out of the title without disturbing the src', () => {
+    const line = `![shot](${IMG} "w=320")`;
+    expect(splitBlocks(line)).toEqual([
+      { kind: 'image', src: IMG, alt: 'shot', width: 320, raw: line },
+    ]);
+  });
+
+  it('leaves a human-authored title alone — it is not a size', () => {
+    const line = `![](${IMG} "Some caption")`;
+    expect(splitBlocks(line)).toEqual([
+      { kind: 'image', src: IMG, alt: '', width: undefined, raw: line },
+    ]);
+  });
 });
 
 describe('joinBlocks round-trip', () => {
@@ -52,6 +69,9 @@ describe('joinBlocks round-trip', () => {
     `leading text\n![](${IMG})`,
     `a\n\n![](${IMG})\n\nb`,
     `para one\n\npara two`,
+    `![](${IMG} "w=320")`,
+    `text above\n![alt](${IMG} "w=64")\ntext below`,
+    `![](${IMG} "not a size")`,
   ])('preserves %j exactly', (content) => {
     expect(roundTrip(content)).toBe(content);
   });
@@ -152,6 +172,102 @@ describe('removeImageBySrc', () => {
   it('leaves content untouched when the src is absent', () => {
     const content = `above\n![](${IMG})`;
     expect(removeImageBySrc(content, IMG2)).toBe(content);
+  });
+});
+
+describe('setImageWidthAt', () => {
+  it('sets the width and rewrites raw in the same step', () => {
+    const blocks = splitBlocks(`![shot](${IMG})`);
+    const next = setImageWidthAt(blocks, 0, 320);
+    expect(next[0]).toEqual({
+      kind: 'image',
+      src: IMG,
+      alt: 'shot',
+      width: 320,
+      raw: `![shot](${IMG} "w=320")`,
+    });
+    expect(joinBlocks(next)).toBe(`![shot](${IMG} "w=320")`);
+  });
+
+  // The load-bearing property: a resized line must re-parse to exactly the same block.
+  it('is idempotent — re-splitting the joined output yields identical blocks', () => {
+    const next = setImageWidthAt(splitBlocks(`![](${IMG})`), 0, 320);
+    expect(splitBlocks(joinBlocks(next))).toEqual(next);
+  });
+
+  it('clears the width back to the plain form', () => {
+    const sized = splitBlocks(`![](${IMG} "w=320")`);
+    expect(joinBlocks(setImageWidthAt(sized, 0, undefined))).toBe(`![](${IMG})`);
+  });
+
+  it('drops a width the format cannot carry rather than storing a lie', () => {
+    const next = setImageWidthAt(splitBlocks(`![](${IMG})`), 0, 99_999);
+    expect(next[0]).toEqual({
+      kind: 'image',
+      src: IMG,
+      alt: '',
+      width: undefined,
+      raw: `![](${IMG})`,
+    });
+  });
+
+  it('returns the same array for a non-image index', () => {
+    const blocks = splitBlocks('just text');
+    expect(setImageWidthAt(blocks, 0, 320)).toBe(blocks);
+  });
+
+  it('returns the same array when the width is unchanged', () => {
+    const blocks = splitBlocks(`![](${IMG} "w=320")`);
+    expect(setImageWidthAt(blocks, 0, 320)).toBe(blocks);
+  });
+});
+
+describe('setImageWidthBySrc', () => {
+  it('sizes a block image and keeps the surrounding text', () => {
+    expect(setImageWidthBySrc(`above\n![](${IMG})\nbelow`, IMG, 320)).toBe(
+      `above\n![](${IMG} "w=320")\nbelow`,
+    );
+  });
+
+  it('sizes an image that is inline inside a paragraph', () => {
+    expect(setImageWidthBySrc(`see ![shot](${IMG}) here`, IMG, 320)).toBe(
+      `see ![shot](${IMG} "w=320") here`,
+    );
+  });
+
+  it('replaces an existing size rather than appending a second one', () => {
+    expect(setImageWidthBySrc(`![](${IMG} "w=320")`, IMG, 480)).toBe(`![](${IMG} "w=480")`);
+  });
+
+  it('leaves content untouched when the src is absent', () => {
+    const content = `above\n![](${IMG})`;
+    expect(setImageWidthBySrc(content, IMG2, 320)).toBe(content);
+  });
+
+  it('does not normalise blank lines when nothing changes', () => {
+    const content = `![](${IMG} "w=320")\n\n![](${IMG2})`;
+    expect(setImageWidthBySrc(content, IMG, 320)).toBe(content);
+  });
+
+  // A `$&` in the alt text must survive the inline fallback's replacer.
+  it('does not re-interpret match references in the alt text', () => {
+    expect(setImageWidthBySrc(`see ![$& $1](${IMG}) here`, IMG, 320)).toBe(
+      `see ![$& $1](${IMG} "w=320") here`,
+    );
+  });
+
+  // Known limitation, recorded so it is documented rather than latent: react-markdown
+  // gives the img override no positional info, so the rendered card can only address
+  // an image by src. The block editor's path is index-based and therefore exact.
+  it('sizes the FIRST of two images sharing one src', () => {
+    expect(setImageWidthBySrc(`![](${IMG})\n![](${IMG})`, IMG, 320)).toBe(
+      `![](${IMG} "w=320")\n![](${IMG})`,
+    );
+  });
+
+  it('refuses an edit that would exceed the server content cap', () => {
+    const content = `${'x'.repeat(CARD_CONTENT_MAX - 5)}\n![](${IMG})`;
+    expect(setImageWidthBySrc(content, IMG, 320)).toBe(content);
   });
 });
 

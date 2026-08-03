@@ -5,13 +5,14 @@ import type {
   PointerEvent as ReactPointerEvent,
 } from 'react';
 import { CardBlockEditor } from './CardBlockEditor';
-import { removeImageBySrc } from './cardBlocks';
+import { removeImageBySrc, setImageWidthBySrc } from './cardBlocks';
 import { CardEditToolbar } from './CardEditToolbar';
 import { CardHandles } from './CardHandles';
 import type { CardRect } from './cardResize';
 import { contrastingTextColor, SHAPE_CLASS, toCardShape } from './cardShapes';
 import { screenToWorld } from './coordinates';
 import { shouldEndEditing } from './editFocus';
+import { imageMarkdown } from './imageSize';
 import type { Card } from '../api/types';
 import { ACCEPTED_IMAGE_TYPES } from '../api/uploads';
 import { useCardBlocks } from '../hooks/useCardBlocks';
@@ -171,7 +172,7 @@ function CardViewImpl(props: CardViewProps) {
         blocks.insertImage(url);
         return;
       }
-      const snippet = `![](${url})`;
+      const snippet = imageMarkdown(url, '');
       replaceContent(contentRef.current ? `${contentRef.current}\n${snippet}` : snippet);
     },
     [blocks, replaceContent],
@@ -180,6 +181,19 @@ function CardViewImpl(props: CardViewProps) {
   /** The × on a rendered image — removes only that image, never the card. */
   const onRemoveImage = useCallback(
     (src: string): void => replaceContent(removeImageBySrc(contentRef.current, src)),
+    [replaceContent],
+  );
+
+  /**
+   * The resize grip on a rendered image. Deliberately un-debounced (unlike the block
+   * editor's path): the drag itself already coalesces to one write per gesture, and
+   * `useUpdateCard` applies its optimistic cache write synchronously — so the new
+   * `card.content` lands in the same tick the drag preview clears. Deferring it would
+   * re-render the OLD content against a cleared preview, i.e. a visible snap-back.
+   */
+  const onResizeImage = useCallback(
+    (src: string, width: number): void =>
+      replaceContent(setImageWidthBySrc(contentRef.current, src, width)),
     [replaceContent],
   );
 
@@ -299,12 +313,18 @@ function CardViewImpl(props: CardViewProps) {
           <CardBlockEditor
             api={blocks}
             initialFocusY={openFocusY}
+            rotation={card.rotation}
             onBlur={onEditorBlur}
             onEscape={cancelEditing}
           />
         ) : card.content ? (
           <Suspense fallback={<div className="whiteboard__card-content">{card.content}</div>}>
-            <CardMarkdown source={card.content} onRemoveImage={inert ? undefined : onRemoveImage} />
+            <CardMarkdown
+              source={card.content}
+              onRemoveImage={inert ? undefined : onRemoveImage}
+              onResizeImage={inert ? undefined : onResizeImage}
+              rotation={card.rotation}
+            />
           </Suspense>
         ) : (
           <div className="whiteboard__card-content whiteboard__card-placeholder">

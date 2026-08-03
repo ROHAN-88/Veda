@@ -4,9 +4,11 @@ import {
   insertImageBlock,
   joinBlocks,
   removeImageAt,
+  setImageWidthAt,
   splitBlocks,
   type CardBlock,
 } from '../canvas/cardBlocks';
+import { CARD_CONTENT_MAX } from '../canvas/constants';
 import { insertAt } from '../canvas/textInsert';
 
 /** Ask the editor to focus a block and place the caret. `nonce` re-fires a repeat. */
@@ -25,6 +27,8 @@ export interface CardBlocksApi {
   /** The editor reports the live caret so toolbar inserts land in the right place. */
   reportCaret: (index: number, caret: number) => void;
   removeImage: (index: number) => void;
+  /** Set an image block's explicit width (drag release). Never moves the caret. */
+  setImageWidth: (index: number, width: number) => void;
   /** Splice Markdown (video/link) at the caret. */
   insertText: (snippet: string) => void;
   /** Drop an uploaded image at the caret, splitting the text block around it. */
@@ -100,6 +104,25 @@ export function useCardBlocks(onChange: (content: string) => void): CardBlocksAp
     [commit],
   );
 
+  /**
+   * Committed on drag release, so no focus argument — moving the caret here would
+   * yank it out of whatever paragraph the user was typing in. Unlike the rendered
+   * card's path this keeps the shared 400ms debounce: the editor renders from local
+   * block state, so the delay is invisible, and one write path avoids two whole-
+   * `content` PATCHes racing.
+   */
+  const setImageWidth = useCallback(
+    (index: number, width: number): void => {
+      const next = setImageWidthAt(current.current, index, width);
+      // Refuse rather than let the server 400 and snap the image back unexplained.
+      if (next === current.current || joinBlocks(next).length > CARD_CONTENT_MAX) {
+        return;
+      }
+      commit(next);
+    },
+    [commit],
+  );
+
   /** The caret's block, or the last text block if it has drifted out of range. */
   const caretTarget = useCallback((): { index: number; caret: number } => {
     const { index, caret: at } = caret.current;
@@ -147,9 +170,20 @@ export function useCardBlocks(onChange: (content: string) => void): CardBlocksAp
       setText,
       reportCaret,
       removeImage,
+      setImageWidth,
       insertText,
       insertImage,
     }),
-    [blocks, focusRequest, reset, setText, reportCaret, removeImage, insertText, insertImage],
+    [
+      blocks,
+      focusRequest,
+      reset,
+      setText,
+      reportCaret,
+      removeImage,
+      setImageWidth,
+      insertText,
+      insertImage,
+    ],
   );
 }

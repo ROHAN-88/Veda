@@ -12,6 +12,8 @@ interface CardBlockEditorProps {
   api: CardBlocksApi;
   /** Client Y of the double-click that opened the editor — picks the first block. */
   initialFocusY: number | null;
+  /** Card rotation in degrees, so an image-resize drag follows the image's own axis. */
+  rotation: number;
   /** Fires on focusout of any block (bubbles) — the card decides whether to close. */
   onBlur: (event: ReactFocusEvent<HTMLDivElement>) => void;
   onEscape: () => void;
@@ -31,10 +33,16 @@ function autoSize(element: HTMLTextAreaElement | null): void {
  * Backspace at the start of a block selects the image above it, and a second press
  * removes it (two steps, because card content edits are not undoable).
  */
-export function CardBlockEditor({ api, initialFocusY, onBlur, onEscape }: CardBlockEditorProps) {
+export function CardBlockEditor({
+  api,
+  initialFocusY,
+  rotation,
+  onBlur,
+  onEscape,
+}: CardBlockEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [selectedImage, setSelectedImage] = useState<number | null>(null);
-  const { blocks, focusRequest, reportCaret, removeImage, setText } = api;
+  const { blocks, focusRequest, reportCaret, removeImage, setImageWidth, setText } = api;
 
   const focusText = useCallback(
     (index: number, caret: number): void => {
@@ -198,12 +206,17 @@ export function CardBlockEditor({ api, initialFocusY, onBlur, onEscape }: CardBl
       {blocks.map((block, index) =>
         block.kind === 'image' ? (
           <CardImageBlock
+            // `width` must stay OUT of the key: including it would remount the <img>
+            // on commit, invalidating the ref and killing an in-flight resize drag.
             key={`image-${index}-${block.src}`}
             src={block.src}
             alt={block.alt}
+            width={block.width}
+            rotation={rotation}
             blockIndex={index}
             selected={selectedImage === index}
             onRemove={() => removeImage(index)}
+            onResize={(width) => setImageWidth(index, width)}
             onKeyDown={(event) => onImageKeyDown(event, index)}
           />
         ) : (

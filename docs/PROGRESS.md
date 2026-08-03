@@ -1152,6 +1152,49 @@ rendered as pictures where they were authored.
 - Known follow-up: a video embed's iframe swallows pointer events, so a card that is mostly a video is
   hard to double-click into — fixing it means an overlay that costs one-click playback.
 
+### Follow-up — drag to resize an image inside a card (2026-08-01)
+
+Card images rendered at a size the software picked (`max-width: 100%` + `max-height: 8em`) with no way
+to change it, so a diagram you needed to read was the same size as a decorative icon. Hovering an image
+now reveals a **grip on its right edge**; drag it to set the image's width, with a live preview and one
+commit on release.
+
+- **Storage is unchanged — no migration, no DTO, no server change.** The width rides in the Markdown
+  **title slot**: `![alt](/api/uploads/… "w=320")`. The title is an _annotation_, so `src` keeps being
+  exactly the upload URL — which matters because `removeImageBySrc`, the editor's React keys, and any
+  future "which upload is this" logic all compare on `src`. `splitBlocks`/`joinBlocks` already
+  round-tripped a title losslessly, so this needed no change to the block model's serialiser.
+- **`imageSize.ts` (pure, 35 tests)** owns the whole format (`w=\d{2,4}` — the grammar itself cannot
+  express an out-of-range value) and the drag math. `imageMarkdown` is the single emitter and _drops_ a
+  width it cannot carry, so it is structurally incapable of writing a line that doesn't re-parse; that
+  is what keeps split→join idempotent. Width only, never height: with `height: auto` the browser
+  re-derives the height from the **used** width, so the aspect ratio survives even when a narrow card
+  clamps the image.
+- **Default behaviour is untouched.** An image that has never been resized carries no title and
+  serialises byte-identically to `![](src)`, keeping the `8em` cap. All 31 pre-existing `cardBlocks`
+  assertions pass unedited — `width?: number` is optional, so `toEqual` ignores it.
+- **`useImageResize`** mirrors `useCardResize`: window pointer listeners, delta ÷ zoom re-read every
+  move, transient preview, one commit on release. It measures `offsetWidth` (untransformed layout px =
+  world px) rather than `getBoundingClientRect`, and starts from the **rendered** width, because
+  `max-width: 100%` means stored ≠ rendered whenever a card was narrowed after its image was sized. It
+  also listens for `pointercancel` and aborts without committing — a gap `useCardResize` still has.
+- **No new dependency, no new CSP surface.** The size is an inline `style={{ width }}`, which
+  `style-src 'unsafe-inline'` already permits for card positioning. Raw HTML (`<img width=…>`) was
+  explicitly rejected: it would need `rehype-raw` and demolish the XSS-safe-by-construction model.
+- **Residual risks / known limitations:**
+  - Image resize is **not undoable**, like every other `card.content` edit (`useCardHistory` covers
+    geometry only). Bringing all content edits into history is the right fix, not a special case.
+  - Two images sharing one `src` in the same card: the grip on the rendered card sizes the **first**
+    one, because react-markdown gives the `img` override no positional info. `removeImageBySrc` has the
+    same limitation today. The block editor's path is index-based and therefore exact.
+  - An explicit width is **px and does not scale with the card's `fontSize`**, unlike the `8em` default
+    cap it replaces — deliberate, so sizes stay stable, but the two behave differently.
+  - The `×` remove button now hugs the **image** rather than the card, a side effect of shrink-wrapping
+    the image block so the grip lands on the right edge. Accepted: the × was previously detached from
+    the thing it deletes.
+  - Keyboard resize is not implemented. The editor path could take Shift+Arrow safely (it is debounced);
+    the rendered card's path is un-debounced, so key-repeat there would storm the API.
+
 ---
 
 ## Research findings — AFFiNE / BlockSuite

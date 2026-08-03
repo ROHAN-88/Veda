@@ -70,6 +70,9 @@
   padding-bottom: 0.3rem;
 }
 
+/* Keep this and `.whiteboard__card-blocks` free of HORIZONTAL padding: `CardImageBlock`
+   measures their `clientWidth` as the width an image may be dragged to, and clientWidth
+   counts padding — any would let an image grow past the visible content box. */
 .whiteboard__card-content {
   height: 100%;
   margin: 0;
@@ -195,12 +198,26 @@
   border-radius: 6px;
   object-fit: contain;
 }
+/* An image the user has sized by dragging its grip opts out of the default height
+   cap. `max-width: 100%` still applies, so it can never overflow its card — the
+   stored width is a TARGET, the rendered width is min(target, available). With
+   `height: auto` the browser re-resolves the height from the USED width, so the
+   aspect ratio survives that clamp. Specificity (0,2,0) beats the base rule above. */
+.whiteboard__card-media-img.sized {
+  max-height: none;
+}
 
-/* An image plus its own × — shown on the rendered card AND in the block editor, so
-   removing a picture never means deleting the card. `span` (block via CSS) keeps
-   the markup valid inside a Markdown paragraph. */
+/* An image plus its own × and resize grip — shown on the rendered card AND in the
+   block editor, so removing or sizing a picture never means touching the card.
+   `span` (block via CSS) keeps the markup valid inside a Markdown paragraph.
+   `fit-content` makes the box HUG the image: the img is centred by its own
+   `margin: … auto`, so a full-width box would put absolutely-positioned chrome on
+   the CARD's edge instead of the IMAGE's — the grip would float in empty space. */
 .whiteboard__card-image-block {
   display: block;
+  width: fit-content;
+  margin-inline: auto; /* keeps the centring the img's `margin: auto` used to give */
+  min-width: 0; /* the block editor renders this as a flex item */
   position: relative;
   outline: none;
 }
@@ -212,7 +229,9 @@
   position: absolute;
   top: 0.5em;
   right: 0.5em;
-  z-index: 1;
+  /* Above the grip: the grip's hit area is extended inward (see `::before` below) and on
+     a short image that extension reaches under the ×, which must keep winning. */
+  z-index: 2;
   padding: 0 0.35rem;
   font-size: 0.85rem;
   line-height: 1.3;
@@ -227,8 +246,51 @@
   opacity: 1;
 }
 
+/* Drag this to set the image's width. `--inv-zoom` (= 1/zoom, published on the world
+   layer) counter-scales it so it stays a CONSTANT SCREEN size, exactly like the card
+   resize handles. The negative margins are load-bearing: `scale()` is applied about
+   the element's own centre, so putting that centre ON the image's right edge is what
+   keeps the grip pinned there at every zoom — a `translate(50%,-50%) scale(…)`
+   composition would drift, because the percentage resolves against the UNSCALED box.
+   Same idiom as `.whiteboard__resize-handle`'s `margin: -5px` below.
+   `touch-action: none` is inherited from `.whiteboard__card-wrapper`, so a touch drag
+   isn't stolen for scrolling — don't remove it there. */
+.whiteboard__card-image-handle {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  z-index: 1;
+  width: 10px;
+  height: 24px;
+  margin: -12px -5px 0 0;
+  padding: 0;
+  background: Canvas;
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  cursor: ew-resize;
+  opacity: 0;
+  transform: scale(var(--inv-zoom, 1));
+  transition: opacity 0.12s ease;
+}
+/* Hit area only — extended INWARD, never outward. The grip is centred ON the image's
+   right edge, so its outer half sits outside `.whiteboard__card-content` once an image
+   fills the card, and `overflow: hidden` suppresses HIT-TESTING there, not just paint.
+   Grabbing the grip back must not depend on that half. Inside the parent's `scale()`, so
+   it stays a constant screen size like the grip itself. */
+.whiteboard__card-image-handle::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 0 -10px;
+}
+.whiteboard__card-wrapper:hover .whiteboard__card-image-handle,
+.whiteboard__card-image-block:focus-within .whiteboard__card-image-handle,
+.whiteboard__card-image-block.selected .whiteboard__card-image-handle {
+  opacity: 1;
+}
+
 /* Block editor: text blocks and images stacked in the order they were authored.
-   The only place a card scrolls — blocks must stay reachable while editing. */
+   The only place a card scrolls — blocks must stay reachable while editing.
+   No horizontal padding, for the reason given on `.whiteboard__card-content` above. */
 .whiteboard__card-blocks {
   display: flex;
   flex-direction: column;

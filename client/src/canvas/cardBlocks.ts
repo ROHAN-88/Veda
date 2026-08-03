@@ -1,3 +1,5 @@
+import { CARD_CONTENT_MAX } from './constants';
+import { imageMarkdown, normalizeImageWidth, parseDestinationWidth } from './imageSize';
 import { transformCardUrl } from './media';
 
 /**
@@ -10,8 +12,14 @@ import { transformCardUrl } from './media';
  * user wrote is ever reordered or restructured.
  */
 export type CardBlock =
-  /** A line that is solely `![alt](src)` — stays a picture while editing. */
-  | { kind: 'image'; src: string; alt: string; raw: string }
+  /**
+   * A line that is solely `![alt](src)` — stays a picture while editing. `width` is
+   * an explicit size in world px read from the `"w=…"` title (see `imageSize.ts`);
+   * absent means the image has never been resized and the CSS default cap applies.
+   * It is a READ-ONLY projection of `raw` — only `setImageWidthAt` changes it, and
+   * that rewrites `raw` in the same step so the two can never disagree.
+   */
+  | { kind: 'image'; src: string; alt: string; width?: number; raw: string }
   /** Everything else, verbatim — one block per run of consecutive lines. */
   | { kind: 'text'; text: string };
 
@@ -31,11 +39,18 @@ function parseImageLine(line: string): CardBlock | null {
   if (!match) {
     return null;
   }
-  const src = match[2].trim().split(/\s+/)[0] ?? '';
+  const destination = match[2].trim();
+  const src = destination.split(/\s+/)[0] ?? '';
   if (src.length === 0 || transformCardUrl(src, 'src') !== src) {
     return null;
   }
-  return { kind: 'image', src, alt: match[1], raw: line };
+  return {
+    kind: 'image',
+    src,
+    alt: match[1],
+    width: parseDestinationWidth(destination),
+    raw: line,
+  };
 }
 
 /** Split content into blocks. Consecutive non-image lines form one text block. */
@@ -116,7 +131,8 @@ export function insertImageBlock(
   src: string,
 ): BlockEdit {
   const target = blocks[blockIndex];
-  const image: CardBlock = { kind: 'image', src, alt: '', raw: `![](${src})` };
+  // Never born sized — a new image gets the CSS default cap until the user drags it.
+  const image: CardBlock = { kind: 'image', src, alt: '', raw: imageMarkdown(src, '') };
   if (!target || target.kind !== 'text') {
     // No text block to split (shouldn't happen via the editor) — append instead.
     const next = [...blocks, image, text('')];
@@ -157,6 +173,14 @@ export function removeImageAt(blocks: CardBlock[], blockIndex: number): BlockEdi
 const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /**
+ * One `![alt](src …)` anywhere in the content, capturing the alt text. Shared by the
+ * remove and resize fallbacks so the two can never drift. The `[^)]*` after the src
+ * swallows any title, including our own `"w=…"`.
+ */
+const inlineImageRegExp = (src: string): RegExp =>
+  new RegExp(`!\\[([^\\]]*)\\]\\(\\s*${escapeRegExp(src)}[^)]*\\)`);
+
+/**
  * Remove the first image with this `src` from raw content — used by the × on a
  * rendered (not-being-edited) card. Falls back to a substring removal when the
  * image is inline inside a paragraph rather than alone on its line.
@@ -167,7 +191,66 @@ export function removeImageBySrc(content: string, src: string): string {
   if (index >= 0) {
     return joinBlocks(removeImageAt(blocks, index).blocks);
   }
-  return content.replace(new RegExp(`!\\[[^\\]]*\\]\\(\\s*${escapeRegExp(src)}[^)]*\\)`), '');
+  return content.replace(inlineImageRegExp(src), '');
+}
+
+/**
+ * Set (or clear, with `undefined`) an image block's explicit width. Rewrites `raw` in
+ * the same step so `joinBlocks` stays the single serialiser and the result re-parses
+ * to an identical block — i.e. split→join stays idempotent. The stored width is the
+ * one that was actually SERIALISED, so a block can never claim a size its own Markdown
+ * doesn't carry. Returns the input array untouched when nothing would change.
+ */
+export function setImageWidthAt(
+  blocks: CardBlock[],
+  blockIndex: number,
+  width: number | undefined,
+): CardBlock[] {
+  const target = blocks[blockIndex];
+  const next = normalizeImageWidth(width);
+  if (!target || target.kind !== 'image' || target.width === next) {
+    return blocks;
+  }
+  const updated = [...blocks];
+  updated[blockIndex] = {
+    kind: 'image',
+    src: target.src,
+    alt: target.alt,
+    width: next,
+    raw: imageMarkdown(target.src, target.alt, next),
+  };
+  return updated;
+}
+
+/**
+ * Set the explicit width of the first image with this `src` in raw content — used by
+ * the resize grip on a rendered (not-being-edited) card. Falls back to an in-place
+ * rewrite when the image is inline inside a paragraph rather than alone on its line.
+ *
+ * Returns `content` unchanged when nothing matched, or when the result would exceed
+ * the server's content cap — a silent no-op beats a 400 that rolls the optimistic
+ * update back and snaps the image to its old size with no explanation.
+ */
+export function setImageWidthBySrc(
+  content: string,
+  src: string,
+  width: number | undefined,
+): string {
+  const cap = (next: string): string => (next.length > CARD_CONTENT_MAX ? content : next);
+  const blocks = splitBlocks(content);
+  const index = blocks.findIndex((block) => block.kind === 'image' && block.src === src);
+  if (index >= 0) {
+    const updated = setImageWidthAt(blocks, index, width);
+    // Bail before joining: a no-op must not normalise the user's blank lines.
+    return updated === blocks ? content : cap(joinBlocks(updated));
+  }
+  // A function replacer, never a `'$1'` string — a `$&` inside the alt text would
+  // otherwise be re-interpreted as a match reference.
+  return cap(
+    content.replace(inlineImageRegExp(src), (_match, alt: string) =>
+      imageMarkdown(src, alt, width),
+    ),
+  );
 }
 
 /** Vertical extent of one rendered text block, in any consistent coordinate space. */

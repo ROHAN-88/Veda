@@ -37,6 +37,20 @@ export const SIZE_MIN = 40;
 export const SIZE_MAX = 10_000;
 
 /**
+ * Explicit card-IMAGE width limits, world px (the same space as card w/h, since a
+ * card's box is laid out in world px inside the scaled world layer). MIN sits BELOW
+ * the card `SIZE_MIN` on purpose — an image is content inside a card, so it must be
+ * allowed smaller than the smallest card. MAX keeps the serialised `w=…` token at
+ * four digits, which the grammar in `imageSize.ts` enforces.
+ */
+export const IMAGE_WIDTH_MIN = 24;
+export const IMAGE_WIDTH_MAX = 4000;
+
+/** Mirrors the server's CONTENT_MAX (server/src/cards/dto/card-bounds.ts) so the
+ *  client can refuse an edit that would 400 rather than let it snap back. */
+export const CARD_CONTENT_MAX = 10_000;
+
+/**
  * Selection-handle sizing. As of Phase 6 the handles/ports are counter-scaled by
  * `--inv-zoom` (see WorldLayer) so these are effectively CONSTANT SCREEN px.
  * `RESIZE_HANDLE_PX` mirrors the `.whiteboard__resize-handle` CSS size (kept in
