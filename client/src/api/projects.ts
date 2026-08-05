@@ -7,5 +7,8 @@ export const projectsApi = {
   create: (name: string): Promise<Project> => apiJson('/projects', 'POST', { name }),
   rename: (id: string, name: string): Promise<Project> =>
     apiJson(`/projects/${id}`, 'PATCH', { name }),
+  /** Set the notes-view background; `''` clears it back to the theme default. */
+  setNotesBg: (id: string, notesBg: string): Promise<Project> =>
+    apiJson(`/projects/${id}`, 'PATCH', { notesBg }),
   remove: (id: string): Promise<void> => apiJson(`/projects/${id}`, 'DELETE'),
 };

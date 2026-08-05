@@ -10,6 +10,12 @@ export interface Project {
   id: string;
   ownerId: string;
   name: string;
+  /**
+   * Notes-view page background, `#rrggbb`. Empty means no choice has been made,
+   * so the view follows the OS light/dark theme. Owner-side only — the public
+   * share payload deliberately does not carry it.
+   */
+  notesBg: string;
   createdAt: string;
   updatedAt: string;
 }

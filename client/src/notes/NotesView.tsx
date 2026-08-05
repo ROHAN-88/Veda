@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useCards } from '../hooks/useCards';
 import { NoteItem } from './NoteItem';
 import { sortCardsForReading } from './noteOrder';
+import { NotesSurface } from './NotesSurface';
 import { useViewMode } from './useViewMode';
 
 /**
@@ -18,6 +19,8 @@ interface NotesViewProps {
    * endpoint, so this view must never issue the owner-scoped request.
    */
   readOnly?: boolean;
+  /** The project's chosen page background, or `''` to follow the OS theme. */
+  notesBg?: string;
 }
 
 /**
@@ -25,7 +28,7 @@ interface NotesViewProps {
  * them off the board. Nothing here edits — it is a projection of the whiteboard,
  * not a second store.
  */
-export function NotesView({ projectId, readOnly = false }: NotesViewProps) {
+export function NotesView({ projectId, readOnly = false, notesBg = '' }: NotesViewProps) {
   const query = useCards(projectId, { enabled: !readOnly });
   const [, setView] = useViewMode();
   const [limit, setLimit] = useState(NOTES_PAGE_SIZE);
@@ -35,7 +38,7 @@ export function NotesView({ projectId, readOnly = false }: NotesViewProps) {
 
   if (query.isError && !cards) {
     return (
-      <div className="notes">
+      <NotesSurface bg={notesBg}>
         <p className="error">Could not load these notes.</p>
         {/* `refetch` bypasses `enabled`, so this must never exist on the share route
             — it would fire an authed request from an anonymous page. */}
@@ -44,7 +47,7 @@ export function NotesView({ projectId, readOnly = false }: NotesViewProps) {
             Retry
           </button>
         )}
-      </div>
+      </NotesSurface>
     );
   }
 
@@ -53,9 +56,9 @@ export function NotesView({ projectId, readOnly = false }: NotesViewProps) {
   // render later — `isLoading` would flash the empty state on every shared link.
   if (!cards) {
     return (
-      <div className="notes">
+      <NotesSurface bg={notesBg}>
         <p className="notes__state muted">Loading notes…</p>
-      </div>
+      </NotesSurface>
     );
   }
 
@@ -63,7 +66,7 @@ export function NotesView({ projectId, readOnly = false }: NotesViewProps) {
   const remaining = ordered.length - visible.length;
 
   return (
-    <div className="notes">
+    <NotesSurface bg={notesBg}>
       {/* Gives the notes' own <h2> titles a parent without changing the visuals. */}
       <h1 className="visually-hidden">Notes</h1>
       {ordered.length === 0 ? (
@@ -95,6 +98,6 @@ export function NotesView({ projectId, readOnly = false }: NotesViewProps) {
           )}
         </>
       )}
-    </div>
+    </NotesSurface>
   );
 }

@@ -57,6 +57,11 @@ model Project {
   ownerId   String
   owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   name        String
+
+  /// Notes-view page background, `#rrggbb`. Empty string = no choice made, so the
+  /// view follows the OS light/dark theme — that is why this is not a hex default.
+  notesBg     String       @default("")
+
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
   cards       Card[]

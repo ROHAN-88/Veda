@@ -32,6 +32,37 @@ export function useRenameProject() {
   });
 }
 
+/**
+ * Set the notes-view background. Optimistic on `['projects', id]` — the key
+ * `useProject` reads — so the surface repaints on click rather than after the
+ * round trip; rolls back on error and reconciles on settle (ADR D10).
+ */
+export function useSetNotesBg(projectId: string) {
+  const queryClient = useQueryClient();
+  const key = ['projects', projectId];
+  return useMutation<Project, Error, string, { previous?: Project }>({
+    mutationFn: (notesBg: string) => projectsApi.setNotesBg(projectId, notesBg),
+    onMutate: async (notesBg) => {
+      const previous = queryClient.getQueryData<Project>(key);
+      if (previous) {
+        queryClient.setQueryData<Project>(key, { ...previous, notesBg });
+      }
+      await queryClient.cancelQueries({ queryKey: key });
+      return { previous };
+    },
+    onError: (_err, _notesBg, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(key, context.previous);
+      }
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: key });
+      // The list endpoint orders by updatedAt, which this PATCH bumps.
+      void queryClient.invalidateQueries({ queryKey: PROJECTS_KEY });
+    },
+  });
+}
+
 export function useDeleteProject() {
   const queryClient = useQueryClient();
   return useMutation({

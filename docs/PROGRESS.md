@@ -1332,6 +1332,77 @@ The fix makes that state observable and documents the step that was missing:
 
 ---
 
+### Follow-up — Notes view: a user-chosen page background (2026-08-06)
+
+#### What was done
+
+The notes view gained a background colour the owner picks from the card palette, stored on the
+project so it follows the board across devices and browsers. A collapsed palette button in the board
+topbar expands to "Default" plus the eight curated swatches; "Default" clears the choice and the page
+goes back to following the OS light/dark theme.
+
+#### How it was done
+
+Almost entirely wiring — the pieces already existed and are already tested:
+
+- **Storage.** `Project.notesBg`, a `#rrggbb` string defaulting to `''`. Empty means "no choice made",
+  which is why the default is not a hex: every existing board keeps the theme-native surface, and
+  "reset to default" is expressible without a nullable column. The migration is a single additive
+  `ALTER TABLE` with a default — no backfill, no downtime.
+- **Validation.** `NOTES_BG = /^(#[0-9a-fA-F]{6})?$/` in `update-project.dto.ts`. `ProjectsService.update`
+  passes the field straight through; Prisma skips `undefined`, so a rename never clears the background
+  and a recolour never touches the name.
+- **Contrast.** `notesSurfaceStyle` (new, pure) returns `{}` when nothing is set and
+  `{ background, color: contrastingTextColor(bg) }` otherwise. Pinning the text colour is mandatory,
+  not decorative: the app runs on `color-scheme: light dark`, so under a dark OS theme the inherited
+  text is light and a light swatch would render light-on-light. This is the same treatment `CardView`
+  gives a card's own fill.
+- **One painted surface.** `.notes` was rendered at four call sites — the error, loading and populated
+  branches of `NotesView` plus `BoardScreen`'s Suspense fallback. A new `NotesSurface` component owns
+  the background and all four route through it, so the colour is present from the first paint instead
+  of appearing once the cards land. `.notes` became the full-bleed surface (`min-height: 100vh`) and the
+  reading measure moved to `.notes__inner`, so the colour reaches the viewport edges rather than sitting
+  behind the text column only.
+- **Threaded, not fetched.** `notesBg` is passed down from `WhiteboardPage` through `BoardScreen`.
+  `SharedWhiteboardPage` passes nothing and gets `''`. No `useProject` call was added anywhere in the
+  notes path — see the security notes.
+
+#### What changed
+
+- `server/prisma/schema.prisma` + `migrations/20260806000000_add_project_notes_bg/`.
+- `server/src/projects/dto/update-project.dto.ts`, `projects.service.ts`, `projects.service.spec.ts`
+  (4 new cases: set, clear, one-field-at-a-time, IDOR).
+- `client/src/api/{types,projects}.ts`, `client/src/hooks/useProjects.ts` (`useSetNotesBg`, optimistic
+  on `['projects', id]` with rollback, per ADR D10).
+- New `client/src/notes/{notesBg.ts,notesBg.test.ts,NotesSurface.tsx,NotesBgPicker.tsx}`.
+- `client/src/notes/notes.css`, `client/src/components/BoardScreen.tsx`, `client/src/pages/WhiteboardPage.tsx`.
+- Client 239 → 247 tests; server 73 → 77.
+
+#### Security notes (notes-background scope)
+
+- **The public share payload was deliberately left unchanged.** The background is an owner-side
+  preference, so `share.service.ts` still selects `{ id, name }` only, no new field lands on an
+  unauthenticated endpoint, and `server/test/` needed no edit at all. A shared board renders on the
+  viewer's own theme surface.
+- **`notesBg` is interpolated into a `style` attribute**, so the server-side `NOTES_BG` allowlist is the
+  control that matters. `notesSurfaceStyle` re-validates with the same rule client-side and emits `{}`
+  on anything unexpected — defence in depth, so a hand-edited row can never reach the DOM as CSS.
+  The two regexes are duplicated by hand and must be changed in step.
+- `PATCH /projects/:id` remains owner-scoped through `getOwned` (404, never 403), so the recolour route
+  inherits the existing IDOR posture; a test asserts it refuses before touching a non-owned project.
+- The picker is not rendered in the read-only share view, but that is presentation only — the
+  authorization is server-side, as always.
+
+#### Residual risks / follow-ups
+
+- No custom `<input type="color">`, unlike `SelectionToolbar` — the curated palette keeps the fixed
+  topbar narrow. The server already accepts any valid hex, so adding one later is UI-only.
+- The whiteboard canvas still has a hardcoded white background; only the notes view is themeable.
+- With a background set, the notes view no longer follows the OS dark theme for that board. That is
+  inherent to honouring a light swatch, and "Default" restores theme-following.
+
+---
+
 ## Research findings — AFFiNE / BlockSuite
 
 Legend: **[V]** verified from the cited repo/docs · **[I]** reasoned inference.

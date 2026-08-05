@@ -15,13 +15,23 @@
  * `color-scheme: light dark`, so light and dark both work with no theme class.
  */
 
+/* The painted page. Full-bleed so a chosen background reaches the viewport edges
+   rather than sitting behind the text column only; `min-height: 100vh` keeps it
+   covering the fold on a short board. When no colour is chosen the inline style is
+   empty and this inherits Canvas/CanvasText from the root colour-scheme. */
 .notes {
-  max-width: 44rem;
-  margin: 0 auto;
+  min-height: 100vh;
   /* `.whiteboard-topbar` is fixed at top 0.75rem and ~2.45rem tall — clear it, plus
      a gap. Content scrolls UNDER it, which is what its translucent blurred
      background was designed for. */
   padding: 4.25rem 1.25rem 4rem;
+}
+
+/* The reading measure — the max-width `.notes` used to own before it became the
+   painted surface. */
+.notes__inner {
+  max-width: 44rem;
+  margin: 0 auto;
 }
 
 .notes__list {
@@ -154,6 +164,31 @@
   color: var(--accent);
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+/* ---- Notes background picker (board topbar, owner only) ----------------- */
+
+.notes__bg {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.notes__bg-row {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.notes__bg-default {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.8rem;
+}
+
+.notes__bg-default[aria-pressed='true'] {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 /* The notes view is a printable document by construction. */

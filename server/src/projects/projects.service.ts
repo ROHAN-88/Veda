@@ -32,9 +32,17 @@ export class ProjectsService {
     return project;
   }
 
+  /**
+   * Patch a project. Prisma skips `undefined` fields, so a rename-only request
+   * leaves `notesBg` alone and vice versa — clearing the background is an explicit
+   * empty string, never an omitted field.
+   */
   async update(userId: string, id: string, dto: UpdateProjectDto) {
     await this.getOwned(userId, id);
-    return this.prisma.project.update({ where: { id }, data: { name: dto.name } });
+    return this.prisma.project.update({
+      where: { id },
+      data: { name: dto.name, notesBg: dto.notesBg },
+    });
   }
 
   async remove(userId: string, id: string): Promise<void> {

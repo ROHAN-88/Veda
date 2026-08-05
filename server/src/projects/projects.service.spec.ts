@@ -69,4 +69,49 @@ describe('ProjectsService', () => {
     );
     expect(mock.project.delete).not.toHaveBeenCalled();
   });
+
+  describe('notes background', () => {
+    const owned = { id: 'p1', ownerId: 'user-1' };
+
+    it('update() persists a chosen background', async () => {
+      const mock = createPrismaMock();
+      mock.project.findFirst.mockResolvedValue(owned);
+      await makeService(mock).update('user-1', 'p1', { notesBg: '#dbeafe' });
+      expect(mock.project.update.mock.calls[0][0]).toMatchObject({
+        data: { notesBg: '#dbeafe' },
+      });
+    });
+
+    it('update() clears the background with an explicit empty string', async () => {
+      const mock = createPrismaMock();
+      mock.project.findFirst.mockResolvedValue(owned);
+      await makeService(mock).update('user-1', 'p1', { notesBg: '' });
+      expect(mock.project.update.mock.calls[0][0].data.notesBg).toBe('');
+    });
+
+    // Prisma treats `undefined` as "leave alone" — this is what stops a rename
+    // from silently wiping the background, and vice versa.
+    it('update() leaves the other field untouched when only one is sent', async () => {
+      const mock = createPrismaMock();
+      mock.project.findFirst.mockResolvedValue(owned);
+      await makeService(mock).update('user-1', 'p1', { name: 'Renamed' });
+      const { data } = mock.project.update.mock.calls[0][0];
+      expect(data.name).toBe('Renamed');
+      expect(data.notesBg).toBeUndefined();
+
+      const mock2 = createPrismaMock();
+      mock2.project.findFirst.mockResolvedValue(owned);
+      await makeService(mock2).update('user-1', 'p1', { notesBg: '#fef9c3' });
+      expect(mock2.project.update.mock.calls[0][0].data.name).toBeUndefined();
+    });
+
+    it('update() refuses (404) before recolouring a non-owned project', async () => {
+      const mock = createPrismaMock();
+      mock.project.findFirst.mockResolvedValue(null);
+      await expect(
+        makeService(mock).update('user-1', 'p-other', { notesBg: '#dbeafe' }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(mock.project.update).not.toHaveBeenCalled();
+    });
+  });
 });

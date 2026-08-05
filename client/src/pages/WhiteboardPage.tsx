@@ -37,7 +37,13 @@ export function WhiteboardPage() {
   }
 
   return (
-    <BoardScreen projectId={id} title={query.data?.name ?? ''} backTo="/" backLabel="← Projects" />
+    <BoardScreen
+      projectId={id}
+      title={query.data?.name ?? ''}
+      backTo="/"
+      backLabel="← Projects"
+      notesBg={query.data?.notesBg ?? ''}
+    />
   );
 }
 
