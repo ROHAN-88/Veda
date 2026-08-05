@@ -4,6 +4,8 @@ import { SkipThrottle } from '@nestjs/throttler';
 interface HealthStatus {
   status: 'ok';
   uptime: number;
+  /** Commit this build came from — `dev` when built without a `GIT_SHA` arg. */
+  build: string;
 }
 
 /**
@@ -16,6 +18,6 @@ interface HealthStatus {
 export class HealthController {
   @Get()
   check(): HealthStatus {
-    return { status: 'ok', uptime: process.uptime() };
+    return { status: 'ok', uptime: process.uptime(), build: process.env.BUILD_SHA || 'dev' };
   }
 }

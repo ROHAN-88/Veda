@@ -61,13 +61,24 @@ A single multi-stage image builds the client + server and runs **both** from one
 serves the built SPA and the API on the same origin (port 3000). The database is **not** in the image;
 the container reaches your host Postgres via `host.docker.internal`.
 
-```bash
-# Build
-docker build -t second-brain .
+> **The built SPA lives inside the image.** Running `npm run build` on the host does **not** change what
+> a container serves — the client bundle is copied in at `docker build` time and read from `CLIENT_DIST`
+> inside the image. **Every code change needs a fresh `docker build`.**
 
-# Apply migrations from the host first:  npm run prisma:deploy --workspace server
-# Then run (Postgres runs natively on your host):
-docker run --rm -p 3000:3000 \
+```bash
+# 1. Build. --build-arg GIT_SHA stamps the image so GET /health can report which
+#    commit it is running (defaults to "dev" if you omit it).
+docker build --build-arg GIT_SHA=$(git rev-parse --short HEAD) -t second-brain .
+
+# 2. Apply migrations from the host (the prisma CLI is a devDependency, so it is
+#    NOT inside the runtime image):  npm run prisma:deploy --workspace server
+
+# 3. Replace any previous container. `docker run --name` fails on a name conflict,
+#    and with --restart=unless-stopped the OLD container keeps serving the port.
+docker rm -f second-brain 2>/dev/null || true
+
+# 4. Run (Postgres runs natively on your host):
+docker run --rm --name second-brain -p 3000:3000 \
   -e NODE_ENV=development \
   -e SESSION_SECRET='<32+ character secret>' \
   -e CORS_ORIGINS='http://localhost:3000' \
@@ -75,6 +86,10 @@ docker run --rm -p 3000:3000 \
   -v second-brain-uploads:/app/uploads \
   second-brain
 # → http://localhost:3000  (SPA + /api + /health)
+
+# 5. Confirm the deploy landed — "build" must match the sha you just built.
+curl -s http://localhost:3000/health
+# {"status":"ok","uptime":1.2,"build":"32c7ed2"}
 ```
 
 Cards can hold Markdown plus **uploaded images**, **YouTube/Vimeo video embeds**, and **links** (use
@@ -85,6 +100,14 @@ Notes:
 
 - **Host database:** allow the Docker bridge subnet in your Postgres `pg_hba.conf` and ensure
   `listen_addresses` covers the Docker gateway, so the container can reach `host.docker.internal:5432`.
+- **On Linux hosts** `host.docker.internal` does not resolve by default (it is a Docker Desktop
+  convenience). Add `--add-host=host.docker.internal:host-gateway` to `docker run`, or point
+  `DATABASE_URL` at the bridge gateway (`172.17.0.1`) directly.
+- **Special characters in the DB password** must be percent-encoded in `DATABASE_URL` — an `@` becomes
+  `%40`, so `p@ss` is `p%40ss`. An unencoded `@` gives the URL two separators and parses ambiguously.
+- **Stale page after a deploy?** Check `GET /health` first: a `build` that is not the sha you just built
+  means the image was not rebuilt (step 1). If `build` is correct but the UI is old, it is the browser —
+  `index.html` is served without a `Cache-Control` header, so hard-refresh.
 - **Cookies over HTTP:** `NODE_ENV=production` sets `Secure`/`__Host-` cookies that browsers drop on
   plain `http://` — for a local run use `NODE_ENV=development` (above); for real production put the
   container behind TLS and keep `production`.

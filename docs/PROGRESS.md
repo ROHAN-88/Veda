@@ -1197,6 +1197,141 @@ commit on release.
 
 ---
 
+### Follow-up — Notes view: read a board's cards as a list (2026-08-05)
+
+#### What was done
+
+Every board gained a second, **read-only** view. A segmented Whiteboard/Notes toggle in the board topbar
+switches between today's canvas and a vertical list of the same cards — in the order a person would read
+them off the board, images included. Nothing in the notes view edits: it is a projection of the
+whiteboard, not a second store. Available on both `/projects/:id` and the public `/share/:token`.
+
+#### How it was done
+
+**No backend, Prisma, DTO, or API change, and no new dependency.** A `Card` already carries everything
+(`x`, `y`, `content`, `color`), images already live inside `content` as `![alt](/api/uploads/… "w=…")`,
+and `CardMarkdown` is already an audited safe renderer for exactly that string.
+
+- **State in the URL.** `client/src/notes/viewMode.ts` is the client's only URL-state module
+  (`parseViewMode` / `withViewMode`); `useViewMode` wraps `useSearchParams`. `?view=notes` survives a
+  refresh, is linkable, and Back undoes the toggle (push, not replace). Anything that is not exactly
+  `notes` reads as the whiteboard, with no redirect and no URL rewrite.
+- **Reading order, not `zIndex`.** `client/src/notes/noteOrder.ts` groups cards into horizontal bands
+  (`ROW_BAND_PX = 48`) anchored to the card that opened each band, then reads each band left to right.
+  `zIndex` is paint order and shifts on every bring-to-front, so a list keyed on it would reshuffle as
+  you click around. The sort copies its input first — the argument is the react-query cache array.
+- **Derived titles.** A card has no title column, so `client/src/notes/noteTitle.ts` takes the first line
+  that renders as text, strips its Markdown, and falls back to the first image's alt. Images and links
+  reduce to alt/label so a URL can never reach a title. Truncated at 120 code points.
+- **Renderer reused verbatim.** `NoteItem` uses `CardMarkdown`'s no-editing-props path — the same one the
+  share view uses — rather than a second Markdown pipeline.
+- **One shell for both routes.** `client/src/components/BoardScreen.tsx` absorbed the topbar both pages
+  hand-rolled, so the toggle and the whiteboard/notes branch exist in exactly one file. It also makes
+  `NotesView` the lazy boundary, keeping the remark stack out of the initial chunk.
+
+#### What changed
+
+- New `client/src/notes/`: `viewMode.ts`, `useViewMode.ts`, `noteOrder.ts`, `noteTitle.ts`,
+  `ViewSwitch.tsx`, `NoteItem.tsx`, `NotesView.tsx`, `notes.css` (+ four colocated test files).
+- New `client/src/components/BoardScreen.tsx`; `WhiteboardPage.tsx` and `SharedWhiteboardPage.tsx` both
+  shrank onto it.
+- `client/src/index.css` imports `notes.css` **last** — the notes view reuses the card markup, so a few
+  rules override `cards.css` for a document layout (the content box must grow rather than clip, and
+  images run to the text edge with the stored `w=…` acting as a target under `max-width: 100%`).
+- Client suite 193 → 239 tests. Build splits a separate `NotesView` chunk; the 155 kB Markdown chunk
+  stayed out of the main bundle.
+
+#### Security notes (Notes view scope)
+
+- **No new endpoint, no new dependency, no CSP change.** The inline image `width` is already covered by
+  the same `style-src` allowance card positioning uses.
+- **The share route still issues zero authenticated requests.** `NotesView` takes `readOnly` with the
+  same name and meaning as `WhiteboardCanvas` and passes `useCards(projectId, { enabled: !readOnly })`.
+  The error state's Retry button is rendered only when `!readOnly`, because `refetch()` bypasses
+  `enabled` and would fire an owner-scoped request from an anonymous page.
+- All rendering goes through the existing `CardMarkdown` path: no `rehype-raw`, `urlTransform` limiting
+  image `src` to same-origin uploads, sandboxed video embeds.
+- The **derived title** is the one string this feature builds itself out of user content. It is rendered
+  as a React text child, never as HTML, and `NoteItem.test.tsx` asserts that a leading
+  `<script>alert(1)</script>` is escaped and that an external image URL never reaches the title.
+
+#### Residual risks / follow-ups
+
+- **Relation arrows are not represented.** An arrow is a spatial relation with no place in a reading
+  order. The follow-up is cheap: `SharedWhiteboardPage` already seeds `connectionsKey`.
+- A card's own `# H1` nests under the note's `<h2>` — an outline nit, unfixable without a rehype plugin
+  in the shared renderer. Normalised visually.
+- No virtualisation above a 150-note initial batch (`content-visibility: auto` plus a "show the rest"
+  button). Revisit only if measurement shows it is insufficient.
+- Stored `w=…` widths are read as absolute px in the column, so an image looks the size it did at 100%
+  zoom on the board.
+- Two minimum-height (40 px) cards stacked flush fall in one band and read left-to-right.
+  `sortCardsForReading` takes a `band` override so a height-proportional rule stays contained.
+
+---
+
+### Fix — deploys served a stale client bundle (2026-08-06)
+
+#### What was done
+
+A deploy of the notes view left the site unchanged. The cause was operational, not a code defect: the
+Docker **image was never rebuilt**. `npm run build` had been run on the host, `docker run` used the
+existing `second-brain` tag, and the container kept serving the previous bundle. Diagnosing it took far
+longer than it should have, because nothing in the running system says which build it is.
+
+#### How it was done
+
+The client bundle is fixed at image build time — `Dockerfile` copies `client/dist` in, `CLIENT_DIST`
+points inside the image, `serve-client.ts` reads `index.html` **once at boot**, and the only volume is
+`/app/uploads`. So the image tag is the sole determinant of which client runs, and a host-side build is
+invisible to the container.
+
+The fix makes that state observable and documents the step that was missing:
+
+- `Dockerfile` takes `ARG GIT_SHA=dev` (re-declared in both stages, since an ARG does not cross stages)
+  and the runtime stage sets `ENV BUILD_SHA=${GIT_SHA}`.
+- `GET /health` gained a `build` field. It stays I/O-free and rate-limit-exempt, so it answers "which
+  commit is this?" even when the database is unreachable.
+- `BUILD_SHA` is deliberately **not** in `env.validation.ts`. It is optional with a safe default, like
+  `CLIENT_DIST`; adding it to the fail-fast contract would break every local `node dist/main.js` run.
+- The README's Docker section is now numbered and states outright that the SPA lives inside the image, so
+  every code change needs a fresh `docker build`. It also gained the Linux `--add-host` note
+  (`host.docker.internal` is a Docker Desktop convenience), the percent-encoding rule for `@` in a DB
+  password, and a "stale page after a deploy?" triage line.
+
+#### What changed
+
+- `Dockerfile` — `ARG GIT_SHA` in both stages, `ENV BUILD_SHA` in the runtime stage.
+- `server/src/health/health.controller.ts` — `build` on `HealthStatus`, from `process.env.BUILD_SHA`
+  falling back to `dev` (`||`, not `??`, so `--build-arg GIT_SHA=` also degrades to the fallback).
+- `server/src/health/health.controller.spec.ts` — **new**; this module previously had zero tests. Five
+  cases, restoring `process.env.BUILD_SHA` after each so they stay independent.
+- `README.md` — numbered rebuild-first deploy steps and four new operational notes.
+
+#### Security notes (deploy-fix scope)
+
+- A short commit sha is already public in the repository, so exposing it on an unauthenticated liveness
+  endpoint discloses nothing new. The endpoint still performs no I/O and returns no user data — a test
+  asserts the payload has exactly `status`, `uptime`, and `build`.
+- No secret is baked into the image: `GIT_SHA` is a build arg, and build args are visible in image
+  history, which is precisely why only the sha travels this way and credentials stay run-time env.
+- The stale-image class of bug is a **security** concern, not only a cosmetic one: a container that
+  silently keeps running old code also keeps running old security fixes.
+
+#### Residual risks / follow-ups
+
+- **Cache headers remain inverted** and were explicitly out of scope. `index.html` is served with no
+  `Cache-Control` (a proxy may hold a stale shell), while content-hashed `assets/*` get `max-age=0`
+  (a revalidation round trip each). The correct pairing is `no-cache` on the shell and
+  `immutable` on the assets.
+- A stale shell requesting a since-deleted asset hash falls through to the SPA fallback and receives
+  **HTTP 200 with HTML**, surfacing as "MIME type text/html is not executable" rather than a clean 404.
+- `serve-client.ts` degrades silently to API-only mode when `CLIENT_DIST` is missing or wrong: no log,
+  and `/health` still returns 200, so the container looks healthy while serving no UI.
+- `serve-client.ts` still has no test coverage; the e2e app boots with `CLIENT_DIST` unset.
+
+---
+
 ## Research findings — AFFiNE / BlockSuite
 
 Legend: **[V]** verified from the cited repo/docs · **[I]** reasoned inference.
