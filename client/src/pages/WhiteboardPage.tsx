@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ApiError } from '../api/client';
-import { WhiteboardCanvas } from '../canvas/WhiteboardCanvas';
+import { BoardScreen } from '../components/BoardScreen';
 import { useProject } from '../hooks/useProjects';
 import { useViewportStore } from '../store/viewportStore';
 
@@ -37,15 +37,7 @@ export function WhiteboardPage() {
   }
 
   return (
-    <>
-      <div className="whiteboard-topbar">
-        <Link to="/" className="whiteboard-back">
-          ← Projects
-        </Link>
-        <span className="whiteboard-title">{query.data?.name}</span>
-      </div>
-      <WhiteboardCanvas projectId={id} />
-    </>
+    <BoardScreen projectId={id} title={query.data?.name ?? ''} backTo="/" backLabel="← Projects" />
   );
 }
 

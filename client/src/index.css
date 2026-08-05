@@ -1,9 +1,13 @@
 /*
  * Global stylesheet manifest. The rules are split across partials to keep every
  * file well under the project's 500-line source cap; @import order below fixes
- * the cascade order (base first, then whiteboard, cards, connections).
+ * the cascade order (base first, then whiteboard, cards, connections, notes).
+ *
+ * `notes.css` comes LAST on purpose: the notes view reuses the card markup, so a
+ * few of its rules override `cards.css` for a document layout.
  */
 @import './styles/base.css';
 @import './canvas/whiteboard.css';
 @import './canvas/cards.css';
 @import './canvas/connections.css';
+@import './notes/notes.css';

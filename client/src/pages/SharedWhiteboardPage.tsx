@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { shareApi } from '../api/share';
-import { WhiteboardCanvas } from '../canvas/WhiteboardCanvas';
+import { BoardScreen } from '../components/BoardScreen';
 import { cardsKey } from '../hooks/useCards';
 import { connectionsKey } from '../hooks/useConnections';
 import { useViewportStore } from '../store/viewportStore';
@@ -48,16 +48,14 @@ export function SharedWhiteboardPage() {
   }
 
   return (
-    <>
-      <div className="whiteboard-topbar">
-        <Link to="/" className="whiteboard-back">
-          Second Brain
-        </Link>
-        <span className="whiteboard-title">{board.project.name}</span>
-        <span className="muted">Read-only · shared link</span>
-      </div>
-      <WhiteboardCanvas projectId={projectId} readOnly />
-    </>
+    <BoardScreen
+      projectId={projectId}
+      title={board.project.name}
+      backTo="/"
+      backLabel="Second Brain"
+      readOnly
+      topbarExtra={<span className="muted">Read-only · shared link</span>}
+    />
   );
 }
 

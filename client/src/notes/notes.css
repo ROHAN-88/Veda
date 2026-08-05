@@ -1,0 +1,174 @@
+/*
+ * Notes view (read-only list projection of a board's cards).
+ *
+ * Two things shape this file:
+ *   1. It is a DOCUMENT, not a canvas. `.whiteboard` is `position: fixed; inset: 0`
+ *      with a hardcoded white background and is NOT mounted here, so the notes list
+ *      is plain flow content and the page scrolls natively.
+ *   2. It reuses `CardMarkdown` verbatim, which emits canvas class names. The rules
+ *      under `.notes__body` below undo the three assumptions that only hold inside
+ *      a fixed-size card. Each is written at higher specificity than the rule it
+ *      beats, so correctness does not rest on @import order alone.
+ *
+ * No background and no literal colour is declared here (the chip carries the user's
+ * own card colour inline): the document inherits Canvas/CanvasText from the root
+ * `color-scheme: light dark`, so light and dark both work with no theme class.
+ */
+
+.notes {
+  max-width: 44rem;
+  margin: 0 auto;
+  /* `.whiteboard-topbar` is fixed at top 0.75rem and ~2.45rem tall — clear it, plus
+     a gap. Content scrolls UNDER it, which is what its translucent blurred
+     background was designed for. */
+  padding: 4.25rem 1.25rem 4rem;
+}
+
+.notes__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.notes__item {
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border);
+  /* Skip layout and paint for notes that are off screen — virtualisation's main
+     benefit with none of its cost. The intrinsic size keeps the scrollbar honest. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 220px;
+}
+
+.notes__item:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.notes__head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* The card's own colour — the one visual encoding that survives the move from a
+   board to a document. Bordered so the default #ffffff stays visible in both
+   schemes. */
+.notes__chip {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+}
+
+.notes__title {
+  margin: 0 0 0.4rem;
+  font-size: 1.05rem;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.notes__title.muted {
+  font-weight: 500;
+}
+
+.notes__state,
+.notes__empty {
+  padding: 1rem 0;
+}
+
+.notes__more {
+  margin-top: 2rem;
+}
+
+/* ---- Card markup reused in a document column ---------------------------- */
+
+/* 1. The content box is sized to a fixed card and clips. A note must grow instead.
+      `overflow-wrap: anywhere` is inherited and KEPT — long URLs must still break. */
+.notes__body .whiteboard__card-content {
+  height: auto;
+  overflow: visible;
+}
+
+.notes__body > :first-child {
+  margin-top: 0;
+}
+
+/* A card's own `# H1` must not out-shout the note's title. */
+.notes__body .whiteboard__card-markdown h1 {
+  font-size: 1.25em;
+}
+
+/* A wide GFM table scrolls itself rather than the page. */
+.notes__body .whiteboard__card-markdown table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+/* 2. Images are capped at 8em and centred to suit a small card. In a column they
+      run to the text edge, and the stored `w=…` width becomes a TARGET: `max-width`
+      wins in used-value resolution, so a `w=4000` image lands at column width and
+      `height: auto` re-derives its aspect ratio. */
+.notes__body .whiteboard__card-media-img {
+  max-width: 100%;
+  max-height: min(60vh, 520px);
+  width: auto;
+  height: auto;
+  margin: 0.5em 0;
+}
+
+/* 3. `.sized` drops the height cap at (0,2,0) so a resized image can fill its card.
+      A document has no such bound, so restore the cap at (0,3,0). */
+.notes__body .whiteboard__card-media-img.sized {
+  max-height: min(60vh, 520px);
+}
+
+/* Video embeds are 100%-wide 16:9 — fine in a card, overbearing in a column. */
+.notes__body .whiteboard__card-embed {
+  max-width: 40rem;
+}
+
+/* ---- Whiteboard / Notes toggle (board topbar) --------------------------- */
+
+/* Own class names so `whiteboard.css` keeps owning canvas chrome, but the same
+   aria-pressed treatment as `.whiteboard__tool` so the two segmented controls read
+   as one system. */
+.view-switch {
+  flex: none;
+  display: flex;
+  gap: 0.2rem;
+}
+
+.view-switch__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.35rem 0.5rem;
+}
+
+.view-switch__btn[aria-pressed='true'] {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+/* The notes view is a printable document by construction. */
+@media print {
+  .whiteboard-topbar {
+    display: none;
+  }
+
+  .notes {
+    max-width: none;
+    padding: 0;
+  }
+
+  .notes__item {
+    break-inside: avoid;
+    content-visibility: visible;
+  }
+}
