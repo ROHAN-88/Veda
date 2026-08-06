@@ -16,6 +16,12 @@ export interface Project {
    * share payload deliberately does not carry it.
    */
   notesBg: string;
+  /**
+   * Whether this project appears in the combined all-projects notes view. A
+   * display preference, not an access control — the board is fully readable at
+   * its own routes either way.
+   */
+  notesIncluded: boolean;
   createdAt: string;
   updatedAt: string;
 }

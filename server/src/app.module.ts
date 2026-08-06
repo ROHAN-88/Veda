@@ -10,6 +10,7 @@ import { validateEnv } from './config/env.validation';
 import { HealthModule } from './health/health.module';
 import { CardsModule } from './cards/cards.module';
 import { ConnectionsModule } from './connections/connections.module';
+import { NotesModule } from './notes/notes.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProjectsModule } from './projects/projects.module';
 import { ShareModule } from './share/share.module';
@@ -40,6 +41,7 @@ import { UploadsModule } from './uploads/uploads.module';
     ProjectsModule,
     CardsModule,
     ConnectionsModule,
+    NotesModule,
     ShareModule,
     UploadsModule,
     HealthModule,

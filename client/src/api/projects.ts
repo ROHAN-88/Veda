@@ -10,5 +10,8 @@ export const projectsApi = {
   /** Set the notes-view background; `''` clears it back to the theme default. */
   setNotesBg: (id: string, notesBg: string): Promise<Project> =>
     apiJson(`/projects/${id}`, 'PATCH', { notesBg }),
+  /** Show or hide this project in the combined all-projects notes view. */
+  setNotesIncluded: (id: string, notesIncluded: boolean): Promise<Project> =>
+    apiJson(`/projects/${id}`, 'PATCH', { notesIncluded }),
   remove: (id: string): Promise<void> => apiJson(`/projects/${id}`, 'DELETE'),
 };

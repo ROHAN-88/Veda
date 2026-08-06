@@ -67,7 +67,8 @@ export function NotesView({ projectId, readOnly = false, notesBg = '' }: NotesVi
 
   return (
     <NotesSurface bg={notesBg}>
-      {/* Gives the notes' own <h2> titles a parent without changing the visuals. */}
+      {/* Names the page for assistive tech without changing the visuals — the
+          notes themselves have no headings, only whatever the cards contain. */}
       <h1 className="visually-hidden">Notes</h1>
       {ordered.length === 0 ? (
         <div className="notes__empty">

@@ -62,6 +62,11 @@ model Project {
   /// view follows the OS light/dark theme — that is why this is not a hex default.
   notesBg     String       @default("")
 
+  /// Whether this project appears in the combined all-projects notes view. A
+  /// display preference, NOT an access control: the board stays fully readable at
+  /// its own routes either way. Defaults true so existing projects show up.
+  notesIncluded Boolean    @default(true)
+
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
   cards       Card[]

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { projectsApi } from '../api/projects';
 import type { Project } from '../api/types';
+import { allNotesKey } from './useAllNotes';
 
 const PROJECTS_KEY = ['projects'];
 
@@ -59,6 +60,44 @@ export function useSetNotesBg(projectId: string) {
       void queryClient.invalidateQueries({ queryKey: key });
       // The list endpoint orders by updatedAt, which this PATCH bumps.
       void queryClient.invalidateQueries({ queryKey: PROJECTS_KEY });
+    },
+  });
+}
+
+/**
+ * Show or hide a project in the combined notes view. Optimistic on the LIST key,
+ * because the filter bar renders from `useProjects()` and a chip that lags behind
+ * the click feels broken.
+ */
+export function useSetNotesIncluded() {
+  const queryClient = useQueryClient();
+  return useMutation<
+    Project,
+    Error,
+    { id: string; notesIncluded: boolean },
+    { previous?: Project[] }
+  >({
+    mutationFn: ({ id, notesIncluded }) => projectsApi.setNotesIncluded(id, notesIncluded),
+    onMutate: async ({ id, notesIncluded }) => {
+      const previous = queryClient.getQueryData<Project[]>(PROJECTS_KEY);
+      if (previous) {
+        queryClient.setQueryData<Project[]>(
+          PROJECTS_KEY,
+          previous.map((project) => (project.id === id ? { ...project, notesIncluded } : project)),
+        );
+      }
+      await queryClient.cancelQueries({ queryKey: PROJECTS_KEY });
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(PROJECTS_KEY, context.previous);
+      }
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: PROJECTS_KEY });
+      // The combined list is server-filtered on this flag, so it is now stale.
+      void queryClient.invalidateQueries({ queryKey: allNotesKey });
     },
   });
 }

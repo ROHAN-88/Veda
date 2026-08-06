@@ -10,9 +10,10 @@
  *      a fixed-size card. Each is written at higher specificity than the rule it
  *      beats, so correctness does not rest on @import order alone.
  *
- * No background and no literal colour is declared here (the chip carries the user's
- * own card colour inline): the document inherits Canvas/CanvasText from the root
- * `color-scheme: light dark`, so light and dark both work with no theme class.
+ * No background and no literal colour is declared here (the page background, when
+ * one is chosen, is applied inline): the document inherits Canvas/CanvasText from
+ * the root `color-scheme: light dark`, so light and dark both work with no theme
+ * class.
  */
 
 /* The painted page. Full-bleed so a chosen background reaches the viewport edges
@@ -55,34 +56,6 @@
 .notes__item:last-child {
   padding-bottom: 0;
   border-bottom: none;
-}
-
-.notes__head {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-/* The card's own colour — the one visual encoding that survives the move from a
-   board to a document. Bordered so the default #ffffff stays visible in both
-   schemes. */
-.notes__chip {
-  flex: none;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  border: 1px solid var(--border);
-}
-
-.notes__title {
-  margin: 0 0 0.4rem;
-  font-size: 1.05rem;
-  font-weight: 650;
-  line-height: 1.3;
-}
-
-.notes__title.muted {
-  font-weight: 500;
 }
 
 .notes__state,
@@ -189,6 +162,73 @@
 .notes__bg-default[aria-pressed='true'] {
   color: var(--accent);
   border-color: var(--accent);
+}
+
+/* ---- Combined all-projects notes view ---------------------------------- */
+
+.notes__page-title {
+  margin: 0 0 1rem;
+  font-size: 1.4rem;
+}
+
+/* Project toggles. Wraps, unlike the fixed topbar, because this sits in normal
+   flow and an account can have many boards. */
+.notes__filter {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding-bottom: 1.25rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.notes__filter-chip {
+  padding: 0.25rem 0.6rem;
+  font-size: 0.85rem;
+  border-radius: 999px;
+}
+
+/* Same accent treatment as `.whiteboard__tool` and `.view-switch__btn`, so every
+   toggle in the app reads as one system. An UNPRESSED chip is the notable state
+   here (the project is hidden), so it is dimmed rather than the reverse. */
+.notes__filter-chip[aria-pressed='true'] {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.notes__filter-chip[aria-pressed='false'] {
+  opacity: 0.55;
+  text-decoration: line-through;
+}
+
+.notes__groups {
+  display: flex;
+  flex-direction: column;
+  gap: 2.5rem;
+}
+
+.notes__group-title {
+  margin: 0 0 1rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+
+.notes__group-title a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.notes__group-title a:hover {
+  text-decoration: underline;
+}
+
+.notes__capped {
+  margin: 0 0 1.5rem;
 }
 
 /* The notes view is a printable document by construction. */

@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer';
-import { IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import { IsBoolean, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 
 /**
  * Notes-view background: a six-digit hex, or the empty string meaning "no choice
@@ -21,4 +21,9 @@ export class UpdateProjectDto {
   @IsString()
   @Matches(NOTES_BG, { message: 'notesBg must be #rrggbb or empty' })
   notesBg?: string;
+
+  /** Show this project in the combined all-projects notes view. */
+  @IsOptional()
+  @IsBoolean()
+  notesIncluded?: boolean;
 }

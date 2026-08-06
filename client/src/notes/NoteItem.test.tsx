@@ -18,8 +18,8 @@ const card = (content: string, overrides: Partial<Card> = {}): Card => ({
   rotation: 0,
   fontSize: 14,
   zIndex: 0,
-  createdAt: '2026-08-05T00:00:00.000Z',
-  updatedAt: '2026-08-05T00:00:00.000Z',
+  createdAt: '2026-08-06T00:00:00.000Z',
+  updatedAt: '2026-08-06T00:00:00.000Z',
   ...overrides,
 });
 
@@ -28,13 +28,27 @@ const render = (content: string, overrides?: Partial<Card>): string =>
   renderToStaticMarkup(<NoteItem card={card(content, overrides)} />);
 
 describe('NoteItem — content', () => {
-  it('renders the derived title as a heading', () => {
-    const html = render('# Sprint plan\nbody text');
-    expect(html).toContain('<h2 class="notes__title">Sprint plan</h2>');
-  });
-
   it('renders the card body', () => {
     expect(render('# Sprint plan\nbody text')).toContain('body text');
+  });
+
+  // The note is the content and only the content. A derived heading would repeat
+  // the card's own first line directly above it.
+  it('renders no title heading of its own', () => {
+    const html = render('Sprint plan\nbody text');
+    expect(html).not.toContain('notes__title');
+    expect(html).not.toContain('Sprint plan</h2>');
+    expect(html).not.toContain('Sprint plan</h3>');
+  });
+
+  it("does not repeat the card's opening line", () => {
+    const html = render('sdfsdf');
+    expect(html.match(/sdfsdf/g)).toHaveLength(1);
+  });
+
+  // A card's own Markdown headings still render — those are the user's content.
+  it("keeps the card's own headings", () => {
+    expect(render('# Real heading')).toContain('<h1>Real heading</h1>');
   });
 
   // The feature's headline requirement: notes must show the board's images.
@@ -45,25 +59,18 @@ describe('NoteItem — content', () => {
     expect(html).toContain(IMG);
   });
 
-  // The CSS clamp itself is not observable in node; what matters here is that the
-  // stored width still reaches the DOM for `max-width: 100%` to act on.
   it('keeps an explicit width and the sized class', () => {
     const html = render(`![shot](${IMG} "w=4000")`);
     expect(html).toContain('style="width:4000px"');
     expect(html).toContain('sized');
   });
 
-  it('falls back to Untitled and an empty-card body for a blank card', () => {
-    const html = render('   \n\t ');
-    expect(html).toContain('Untitled');
-    expect(html).toContain('notes__title muted');
-    expect(html).toContain('Empty card');
+  it('shows an empty-card placeholder for a blank card', () => {
+    expect(render('   \n\t ')).toContain('Empty card');
   });
 
-  it('shows the card colour on an aria-hidden chip', () => {
-    const html = render('note', { color: '#fee2e2' });
-    expect(html).toContain('background:#fee2e2');
-    expect(html).toContain('aria-hidden="true"');
+  it('no longer renders a colour chip', () => {
+    expect(render('note', { color: '#fee2e2' })).not.toContain('notes__chip');
   });
 });
 
@@ -82,18 +89,11 @@ describe('NoteItem — security', () => {
     expect(html).toContain('&lt;img');
   });
 
-  // The title is the ONE string this feature builds itself out of user content, so
-  // it is the one place that could newly inject. It is a React text child, never
-  // HTML — this asserts that stays true.
-  it('escapes markup in the derived title', () => {
+  // Nothing in this component builds a string out of user content any more — the
+  // whole payload goes through CardMarkdown's audited path.
+  it('escapes markup anywhere in the content', () => {
     const html = render('<script>alert(1)</script>\nbody');
     expect(html).not.toContain('<script');
     expect(html).toContain('&lt;script');
-  });
-
-  it('never puts an external image URL in the title', () => {
-    const html = render('![x](https://evil.example/tracker.png)');
-    expect(html).toContain('>x</h2>');
-    expect(html).not.toContain('evil.example');
   });
 });

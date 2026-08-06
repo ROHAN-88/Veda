@@ -87,6 +87,11 @@ export function ProjectsPage() {
       <header className="topbar">
         <h1>Projects</h1>
         <div className="topbar-right">
+          {/* Global action, so it lives here rather than on the project rows —
+              those already carry Share / Export / Rename / Delete. */}
+          <Link to="/notes" className="ghost button-link">
+            All notes
+          </Link>
           <span className="muted">{user?.email}</span>
           <button className="ghost" onClick={onLogout} disabled={logout.isPending}>
             Log out

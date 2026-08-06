@@ -1220,9 +1220,9 @@ and `CardMarkdown` is already an audited safe renderer for exactly that string.
   (`ROW_BAND_PX = 48`) anchored to the card that opened each band, then reads each band left to right.
   `zIndex` is paint order and shifts on every bring-to-front, so a list keyed on it would reshuffle as
   you click around. The sort copies its input first — the argument is the react-query cache array.
-- **Derived titles.** A card has no title column, so `client/src/notes/noteTitle.ts` takes the first line
-  that renders as text, strips its Markdown, and falls back to the first image's alt. Images and links
-  reduce to alt/label so a URL can never reach a title. Truncated at 120 code points.
+- **No per-note headings.** A card has no title column. An early version derived one from the first
+  line of `content`, but the body then rendered that same line directly underneath, so every note
+  showed its opening line twice — see the correction below. A note is its content and nothing else.
 - **Renderer reused verbatim.** `NoteItem` uses `CardMarkdown`'s no-editing-props path — the same one the
   share view uses — rather than a second Markdown pipeline.
 - **One shell for both routes.** `client/src/components/BoardScreen.tsx` absorbed the topbar both pages
@@ -1231,8 +1231,8 @@ and `CardMarkdown` is already an audited safe renderer for exactly that string.
 
 #### What changed
 
-- New `client/src/notes/`: `viewMode.ts`, `useViewMode.ts`, `noteOrder.ts`, `noteTitle.ts`,
-  `ViewSwitch.tsx`, `NoteItem.tsx`, `NotesView.tsx`, `notes.css` (+ four colocated test files).
+- New `client/src/notes/`: `viewMode.ts`, `useViewMode.ts`, `noteOrder.ts`, `ViewSwitch.tsx`,
+  `NoteItem.tsx`, `NotesView.tsx`, `notes.css` (+ colocated test files).
 - New `client/src/components/BoardScreen.tsx`; `WhiteboardPage.tsx` and `SharedWhiteboardPage.tsx` both
   shrank onto it.
 - `client/src/index.css` imports `notes.css` **last** — the notes view reuses the card markup, so a few
@@ -1251,9 +1251,10 @@ and `CardMarkdown` is already an audited safe renderer for exactly that string.
   `enabled` and would fire an owner-scoped request from an anonymous page.
 - All rendering goes through the existing `CardMarkdown` path: no `rehype-raw`, `urlTransform` limiting
   image `src` to same-origin uploads, sandboxed video embeds.
-- The **derived title** is the one string this feature builds itself out of user content. It is rendered
-  as a React text child, never as HTML, and `NoteItem.test.tsx` asserts that a leading
-  `<script>alert(1)</script>` is escaped and that an external image URL never reaches the title.
+- **This feature builds no strings out of user content.** The whole card payload goes through
+  `CardMarkdown`'s audited path, so there is no second escaping surface to get wrong;
+  `NoteItem.test.tsx` asserts a `<script>` in the content is escaped and that an external image URL
+  never renders.
 
 #### Residual risks / follow-ups
 
@@ -1400,6 +1401,123 @@ Almost entirely wiring — the pieces already existed and are already tested:
 - The whiteboard canvas still has a hardcoded white background; only the notes view is themeable.
 - With a background set, the notes view no longer follows the OS dark theme for that board. That is
   inherent to honouring a light swatch, and "Default" restores theme-following.
+
+---
+
+### Follow-up — All-projects notes view with per-project include/exclude (2026-08-06)
+
+#### What was done
+
+An **All notes** button on the projects page opens `/notes`: every project's cards in one read-only
+list, grouped by board, each group in the same reading order the single-board view uses. A filter bar
+at the top of that page toggles which projects appear, and the choice is stored on the project so it
+follows the user across devices.
+
+#### How it was done
+
+- **One endpoint, not a fan-out.** New `GET /api/notes` (`server/src/notes/`). The alternative — one
+  `GET /projects/:id/cards` per project from the client — would have shared a single
+  100-requests-per-minute **per-IP** throttle bucket with every other card read, so a large account
+  could rate-limit itself; with `retry: false` set globally those 429s surface as hard errors with no
+  recovery. It would also have introduced `useQueries`, a pattern the client does not otherwise use.
+- **Authorization is the where-clause.** `where: { deletedAt: null, project: { ownerId, notesIncluded: true } }`
+  — the same relation-filter idiom as `CardsService.assertCardsOwned`. There is no preceding ownership
+  assertion because there is nothing to assert: a foreign card cannot be selected in the first place.
+- **`Project.notesIncluded Boolean @default(true)`**, so every existing board appears the first time
+  the view is opened. Patched through the existing `PATCH /projects/:id`; Prisma's `undefined`
+  semantics mean `name`, `notesBg` and `notesIncluded` compose without clobbering each other, and a
+  spec asserts exactly that.
+- **Grouping is a pure function.** `groupNotesByProject` buckets by `projectId`, orders groups by the
+  server's project order (`updatedAt desc`), sorts each with the existing `sortCardsForReading`, drops
+  empty groups so a cardless board is not a bare heading, and drops cards whose project is missing from
+  the list (only possible while the two queries are briefly out of step).
+- **Headings stay correct in both views.** `NoteItem` took a `level` prop defaulting to `2`; the
+  combined page passes `3`, because project names are the `h2` there.
+- **Paging is across the flattened list**, not per group — otherwise one huge first board would hide
+  every other project below the fold.
+
+#### What changed
+
+- `server/prisma/schema.prisma` + `migrations/20260806010000_add_project_notes_included/`.
+- New `server/src/notes/{notes.module,notes.controller,notes.service,notes.service.spec}.ts`;
+  registered in `app.module.ts`.
+- `server/src/projects/dto/update-project.dto.ts`, `projects.service.ts`, `projects.service.spec.ts`.
+- New `client/src/api/notes.ts`, `client/src/hooks/useAllNotes.ts`,
+  `client/src/notes/{groupNotesByProject.ts,groupNotesByProject.test.ts,NotesProjectFilter.tsx}`,
+  `client/src/pages/AllNotesPage.tsx`.
+- `client/src/api/{types,projects}.ts`, `client/src/hooks/useProjects.ts` (`useSetNotesIncluded`),
+  `client/src/notes/NoteItem.tsx`, `client/src/notes/notes.css`, `client/src/pages/ProjectsPage.tsx`,
+  `client/src/App.tsx`, and a `.button-link` rule in `client/src/styles/base.css`.
+- Server 77 → 85 tests; client 247 → 256.
+
+#### Security notes (all-projects notes scope)
+
+- **`GET /api/notes` is authorized entirely by its where-clause.** `project: { ownerId: userId }` means
+  another user's cards are not merely filtered out of the response — they are never selected. There is
+  no ownership pre-check to forget and no 404-vs-403 decision to get wrong (OWASP A01 / CWE-639). The
+  spec asserts the clause directly, including that no caller-supplied `projectId` ever reaches it.
+- **`NOTES_CARDS_MAX = 2000` bounds the read** (CWE-400). This is the only query in the app whose size
+  scales with the caller's entire account rather than one board. The cap is **surfaced in the UI** when
+  hit rather than truncating silently.
+- **`notesIncluded` is a display preference, not an access control.** An excluded project stays fully
+  readable at its own routes and its sharing is unaffected. Nothing should ever be hidden _for
+  security_ by unticking it.
+- The route sits behind `SessionAuthGuard` like every other owner route; unauthenticated calls 401.
+
+#### Residual risks / follow-ups
+
+- The combined view is a separate cache key from the per-board `['cards', projectId]` entries, so a
+  card edited on a whiteboard is not reflected until `/notes` refetches on next mount. Deliberate —
+  merging the caches would let the whiteboard's optimistic mutations write into this list.
+- The page renders on the theme surface; a board's `notesBg` is not applied, since choosing one board's
+  colour for a mixed list would be arbitrary.
+- Above 2000 cards the view is capped with no "load more from the server" path.
+- The filter bar lists every project with no search or grouping, which will get long for a large
+  account.
+
+---
+
+### Fix — notes repeated every card's first line (2026-08-06)
+
+#### What was done
+
+Removed the per-note title heading and the card-colour dot. A note is now the card's rendered content
+and nothing else.
+
+#### How it was done
+
+The title was **derived** — a card has no title column, so `deriveNoteTitle` took the first line of
+`content` that rendered as text. The body then rendered that same line again immediately below it, so
+in practice every note displayed its opening line twice. There was no version of the heuristic that
+fixed this: the title was, by construction, text the body was also going to show.
+
+The colour dot went with it. It had shared the title's row; on its own it would have occupied a line
+to convey what the board already shows better.
+
+Deleting the title removed the last place this feature constructed a string out of user content, so
+the entire note payload now goes through `CardMarkdown`'s audited path. That is a strictly smaller
+attack surface, not a lost control — the two XSS tests that guarded the title are gone because the
+thing they guarded no longer exists, and `NoteItem.test.tsx` still asserts the content path escapes
+`<script>`, drops external images, and refuses `javascript:` URLs.
+
+#### What changed
+
+- `client/src/notes/NoteItem.tsx` — title, colour chip, and the `level` prop all removed; the
+  component is now props-in-content-out with no derivation.
+- **Deleted** `client/src/notes/noteTitle.ts` and `noteTitle.test.ts` (~210 lines, 20 tests). Nothing
+  else imported them, and the repo's rule is to remove dead code rather than leave it unreferenced.
+- `client/src/notes/notes.css` — `.notes__head`, `.notes__chip`, `.notes__title` removed.
+- `client/src/pages/AllNotesPage.tsx` — the `level={3}` argument is gone; project names remain the
+  `h2` in the combined view, and notes contribute no headings of their own.
+- Client 256 → 240 tests.
+
+#### Residual risks / follow-ups
+
+- Notes are now visually separated only by the divider rule between items. On a board of very short
+  cards the list reads as a run of one-liners with no per-card anchor. If that becomes a problem the
+  answer is a real `title` column on `Card`, not another heuristic.
+- A card's own Markdown headings still render, so a board that uses `# ...` per card already gets
+  headings for free.
 
 ---
 

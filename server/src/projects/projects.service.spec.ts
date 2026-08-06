@@ -105,6 +105,29 @@ describe('ProjectsService', () => {
       expect(mock2.project.update.mock.calls[0][0].data.name).toBeUndefined();
     });
 
+    it('update() toggles notesIncluded in both directions', async () => {
+      const mock = createPrismaMock();
+      mock.project.findFirst.mockResolvedValue(owned);
+      await makeService(mock).update('user-1', 'p1', { notesIncluded: false });
+      expect(mock.project.update.mock.calls[0][0].data.notesIncluded).toBe(false);
+
+      const mock2 = createPrismaMock();
+      mock2.project.findFirst.mockResolvedValue(owned);
+      await makeService(mock2).update('user-1', 'p1', { notesIncluded: true });
+      expect(mock2.project.update.mock.calls[0][0].data.notesIncluded).toBe(true);
+    });
+
+    // All three patchable fields are independent — the whole point of relying on
+    // Prisma's `undefined` semantics rather than building a partial object.
+    it('update() sending one field leaves the other two undefined', async () => {
+      const mock = createPrismaMock();
+      mock.project.findFirst.mockResolvedValue(owned);
+      await makeService(mock).update('user-1', 'p1', { notesIncluded: false });
+      const { data } = mock.project.update.mock.calls[0][0];
+      expect(data.name).toBeUndefined();
+      expect(data.notesBg).toBeUndefined();
+    });
+
     it('update() refuses (404) before recolouring a non-owned project', async () => {
       const mock = createPrismaMock();
       mock.project.findFirst.mockResolvedValue(null);

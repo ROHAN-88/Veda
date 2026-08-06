@@ -1,5 +1,6 @@
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { AllNotesPage } from './pages/AllNotesPage';
 import { LoginPage } from './pages/LoginPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { ProjectsPage } from './pages/ProjectsPage';
@@ -16,6 +17,7 @@ const router = createBrowserRouter([
     element: <ProtectedRoute />,
     children: [
       { path: '/', element: <ProjectsPage /> },
+      { path: '/notes', element: <AllNotesPage /> },
       { path: '/projects/:id', element: <WhiteboardPage /> },
     ],
   },

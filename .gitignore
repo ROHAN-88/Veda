@@ -19,8 +19,6 @@ server/src/generated/
 /server/uploads/
 
 # Secrets & local env — NEVER commit populated env files (CWE-798)
-.env
-.env.*
 !.env.example
 
 # Logs
@@ -39,3 +37,4 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 .gstack/
+config.bat
